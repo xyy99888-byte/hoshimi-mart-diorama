@@ -3,12 +3,26 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>星見マート · 雨夜の街角</title>
+  <title>星見マート · 雨と晴れの街角</title>
   <link rel="icon" href="data:," />
   <link rel="stylesheet" href="src/style.css" />
 </head>
 <body>
   <canvas id="scene"></canvas>
+  <div class="weather-toggle" id="weatherToggle" role="group" aria-label="天气切换">
+    <button class="weather-btn" id="btnSunny" type="button" aria-label="切换到晴天" aria-pressed="true" title="晴天">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+        <circle cx="12" cy="12" r="4.1"></circle>
+        <path d="M12 2.6v2.2M12 19.2v2.2M4.6 12H2.4M21.6 12h-2.2M5.7 5.7 4.1 4.1M19.9 19.9l-1.6-1.6M5.7 18.3 4.1 19.9M19.9 4.1l-1.6 1.6"></path>
+      </svg>
+    </button>
+    <button class="weather-btn" id="btnRain" type="button" aria-label="切换到雨夜" aria-pressed="false" title="雨夜">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M7.2 15.6a4.1 4.1 0 0 1 .6-8.1A5.6 5.6 0 0 1 18.5 9a3.4 3.4 0 0 1 .6 6.6"></path>
+        <path d="M7.7 18.4 6.9 21M11.8 18.4l-.8 2.6M15.9 18.4l-.8 2.6"></path>
+      </svg>
+    </button>
+  </div>
   <script src="vendor/three.min.js"></script>
   <script src="vendor/CopyShader.js"></script>
   <script src="vendor/LuminosityHighPassShader.js"></script>

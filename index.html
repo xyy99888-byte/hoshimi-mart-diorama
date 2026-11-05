@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>星見マート · 雨夜の街角</title>
+  <title>星見マート · 雨と晴れの街角</title>
   <link rel="icon" href="data:," />
   <style>
 html, body {
@@ -13,6 +13,11 @@ html, body {
   height: 100%;
   overflow: hidden;
   background: #05070d;
+  transition: background-color 0.9s ease;
+}
+
+body.sunny {
+  background: #bfe2f3;
 }
 
 #scene {
@@ -39,9 +44,101 @@ body::after {
     linear-gradient(to bottom, rgba(8, 14, 28, 0.1) 0%, rgba(8, 14, 28, 0) 22%);
 }
 
+body.sunny::after {
+  background:
+    radial-gradient(ellipse at 50% 42%, rgba(255, 255, 255, 0) 52%, rgba(130, 174, 199, 0.08) 100%),
+    linear-gradient(to bottom, rgba(255, 253, 240, 0.08) 0%, rgba(255, 255, 255, 0) 28%);
+}
+
+/* The one and only interface affordance: a tiny weather switch. */
+.weather-toggle {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  z-index: 5;
+  display: flex;
+  gap: 3px;
+  padding: 4px;
+  border-radius: 999px;
+  border: 1px solid rgba(230, 244, 255, 0.2);
+  background: rgba(10, 18, 28, 0.32);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  opacity: 0.58;
+  transition: opacity 0.25s ease, background-color 0.6s ease, border-color 0.6s ease;
+}
+
+.weather-toggle:hover,
+.weather-toggle:focus-within {
+  opacity: 1;
+}
+
+.weather-btn {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  color: rgba(226, 240, 252, 0.72);
+  cursor: pointer;
+  transition: background-color 0.25s ease, color 0.25s ease, transform 0.2s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.weather-btn svg {
+  width: 19px;
+  height: 19px;
+  display: block;
+}
+
+.weather-btn:hover {
+  transform: translateY(-1px);
+}
+
+.weather-btn.is-active {
+  color: #20333e;
+  background: rgba(255, 249, 224, 0.95);
+}
+
+body.sunny .weather-toggle {
+  background: rgba(255, 255, 255, 0.7);
+  border-color: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 6px 22px rgba(57, 95, 115, 0.2);
+  opacity: 0.78;
+}
+
+body.sunny .weather-btn {
+  color: rgba(53, 84, 96, 0.72);
+}
+
+body.sunny .weather-btn.is-active {
+  color: #94510b;
+  background: #ffe6a3;
+  box-shadow: 0 0 0 1px rgba(232, 166, 56, 0.35) inset;
+}
+
 @media (max-width: 700px) {
   body::after {
-    background: radial-gradient(ellipse at 50% 48%, rgba(8, 14, 28, 0) 38%, rgba(2, 4, 9, 0.55) 100%);
+    background: radial-gradient(ellipse at 50% 48%, rgba(8, 14, 28, 0) 38%, rgba(2, 4, 9, 0.4) 100%);
+  }
+
+  body.sunny::after {
+    background: radial-gradient(ellipse at 50% 44%, rgba(255, 255, 255, 0) 55%, rgba(130, 174, 199, 0.08) 100%);
+  }
+
+  .weather-toggle {
+    bottom: 14px;
+    opacity: 0.7;
+  }
+
+  .weather-btn {
+    width: 32px;
+    height: 32px;
   }
 }
 
@@ -49,6 +146,20 @@ body::after {
 </head>
 <body>
   <canvas id="scene"></canvas>
+  <div class="weather-toggle" id="weatherToggle" role="group" aria-label="天气切换">
+    <button class="weather-btn" id="btnSunny" type="button" aria-label="切换到晴天" aria-pressed="true" title="晴天">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+        <circle cx="12" cy="12" r="4.1"></circle>
+        <path d="M12 2.6v2.2M12 19.2v2.2M4.6 12H2.4M21.6 12h-2.2M5.7 5.7 4.1 4.1M19.9 19.9l-1.6-1.6M5.7 18.3 4.1 19.9M19.9 4.1l-1.6 1.6"></path>
+      </svg>
+    </button>
+    <button class="weather-btn" id="btnRain" type="button" aria-label="切换到雨夜" aria-pressed="false" title="雨夜">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M7.2 15.6a4.1 4.1 0 0 1 .6-8.1A5.6 5.6 0 0 1 18.5 9a3.4 3.4 0 0 1 .6 6.6"></path>
+        <path d="M7.7 18.4 6.9 21M11.8 18.4l-.8 2.6M15.9 18.4l-.8 2.6"></path>
+      </svg>
+    </button>
+  </div>
 <script>
 /* three.min.js */
 /**
@@ -2059,6 +2170,26 @@ const FONT_JP = '"Yu Gothic UI", "Yu Gothic", "Hiragino Kaku Gothic ProN", "Meir
 const FONT_EN = '"Trebuchet MS", "Yu Gothic UI", "Meiryo", sans-serif';
 
 // ------------------------------------------------------------
+// Weather state (sunny day / rainy night, same miniature)
+// ------------------------------------------------------------
+const WEATHER_KEY = 'hoshimi-weather';
+const queryWeather = new URLSearchParams(window.location.search).get('weather');
+let storedWeather = null;
+try {
+  storedWeather = window.localStorage.getItem(WEATHER_KEY);
+} catch (e) {
+  storedWeather = null;
+}
+const initialWeather = queryWeather === 'rain' || queryWeather === 'sunny'
+  ? queryWeather
+  : (storedWeather === 'rain' ? 'rain' : 'sunny');
+let weatherTarget = initialWeather === 'sunny' ? 1 : 0;
+let weatherMix = weatherTarget;
+let weatherTransitionFrom = weatherMix;
+let weatherTransitionStart = performance.now();
+if (weatherMix > 0.5) document.body.classList.add('sunny');
+
+// ------------------------------------------------------------
 // Renderer / scene / camera
 // ------------------------------------------------------------
 const canvas = document.getElementById('scene');
@@ -2107,8 +2238,8 @@ const skyDome = new THREE.Mesh(
       varying vec3 vDir;
       void main() {
         float h = vDir.y;
-        vec3 col = mix(uHorizon, uTop, smoothstep(0.0, 0.85, h));
-        col = mix(uBottom, col, smoothstep(-0.55, 0.05, h));
+        vec3 col = mix(uHorizon, uTop, smoothstep(-0.02, 0.42, h));
+        col = mix(uBottom, col, smoothstep(-0.52, 0.03, h));
         gl_FragColor = vec4(col, 1.0);
       }
     `,
@@ -2155,10 +2286,6 @@ function fitModelToViewport(resetDirection = false) {
   controls.update();
 }
 fitModelToViewport(true);
-// Begin a little closer for the assembly reveal, then ease back so the full
-// square plinth is visible once the miniature is complete.
-camera.position.copy(controls.target).addScaledVector(CAM_DIR, fittedDistance * 0.84);
-controls.update();
 
 // ------------------------------------------------------------
 // Post-processing (gentle anime neon bloom)
@@ -2218,11 +2345,15 @@ composer.addPass(gradePass);
 // ------------------------------------------------------------
 // Lighting — cool rainy night + one warm shop interior
 // ------------------------------------------------------------
-scene.add(new THREE.AmbientLight(0x53688f, 0.09));
+const ambient = new THREE.AmbientLight(0x53688f, 0.09);
+ambient.name = 'ambient';
+scene.add(ambient);
 const hemi = new THREE.HemisphereLight(0x8ba9de, 0x19111f, 0.11);
+hemi.name = 'hemi';
 scene.add(hemi);
 
 const moon = new THREE.DirectionalLight(0xc5d7ff, 1.02);
+moon.name = 'sunKey';
 moon.position.set(-7.5, 14.0, 10.5);
 moon.target.position.set(-1.0, 0, -2.0);
 moon.castShadow = true;
@@ -2241,6 +2372,7 @@ scene.add(moon.target);
 // Cool rim from behind keeps the diorama silhouetted and gives the cel bands
 // a crisp second edge.
 const rimLight = new THREE.DirectionalLight(0x6f8cff, 0.3);
+rimLight.name = 'rimLight';
 rimLight.position.set(9, 6, -10);
 rimLight.target.position.set(-1, 1.2, -2.5);
 scene.add(rimLight);
@@ -2255,6 +2387,13 @@ const interiorLightB = new THREE.PointLight(0xffb877, 0.98, 8.0, 1.75);
 interiorLightB.position.set(-0.15, 2.65, -4.35);
 scene.add(interiorLightB);
 
+// Daylight-only warm fill so the shop interior stays legible when the bright
+// sun casts the street into higher contrast.
+const dayFill = new THREE.PointLight(0xffdca8, 0, 9.0, 1.55);
+dayFill.name = 'dayFill';
+dayFill.position.set(-1.15, 2.45, -2.65);
+scene.add(dayFill);
+
 // Fridge-cool fill
 const fridgeFill = new THREE.PointLight(0xb8ecff, 0.5, 5.5, 1.8);
 fridgeFill.position.set(-1.7, 1.9, -5.15);
@@ -2263,6 +2402,7 @@ scene.add(fridgeFill);
 // Street lamp — a downward spot, not a bare point light, so the roof does not
 // collect mysterious circular light pools.
 const streetLight = new THREE.SpotLight(0xffb16a, 2.2, 12.0, Math.PI / 3.1, 0.58, 1.55);
+streetLight.name = 'streetLampLight';
 streetLight.position.set(-3.68, 4.42, 2.45);
 streetLight.target.position.set(-3.25, 0.08, 2.85);
 streetLight.castShadow = false;
@@ -2309,6 +2449,7 @@ function toon(color, opts = {}) {
   }
   if (opts.side) mat.side = opts.side;
   if (opts.depthWrite !== undefined) mat.depthWrite = opts.depthWrite;
+  if (opts.flatShading) mat.flatShading = true;
   return mat;
 }
 
@@ -2433,6 +2574,8 @@ function makeGlowSprite(color, size, x, y, z, opacity = 0.7, parent = scene) {
   const s = new THREE.Sprite(mat);
   s.position.set(x, y, z);
   s.scale.set(size, size, 1);
+  s.userData.rainOnly = true;
+  s.userData.glowBaseOpacity = opacity;
   parent.add(s);
   return s;
 }
@@ -2611,6 +2754,7 @@ function reflectionStrip(parent, color, w, l, x, z, opacity, rot = 0, y = 0.047)
   mesh.rotation.z = rot;
   mesh.position.set(x, y, z);
   mesh.renderOrder = 5;
+  mesh.userData.rainOnly = true;
   parent.add(mesh);
   return mesh;
 }
@@ -2662,6 +2806,7 @@ function puddle(parent, x, z, sx, sz, rot = 0, opacity = 0.55, y = 0.044) {
   mesh.scale.set(sx, sz, 1);
   mesh.position.set(x, y, z);
   mesh.renderOrder = 3;
+  mesh.userData.rainOnly = true;
   parent.add(mesh);
   return mesh;
 }
@@ -2699,6 +2844,7 @@ function softLightPool(parent, color, w, d, x, z, opacity, y = 0.171) {
   mesh.rotation.x = -Math.PI / 2;
   mesh.position.set(x, y, z);
   mesh.renderOrder = 5;
+  mesh.userData.rainOnly = true;
   parent.add(mesh);
   return mesh;
 }
@@ -2733,6 +2879,81 @@ TEX.roof = canvasTexture(512, 512, (ctx, w, h) => {
     ctx.fill();
   }
 });
+
+TEX.asphaltDay = canvasTexture(512, 512, (ctx, w, h) => {
+  ctx.fillStyle = '#7c7973';
+  ctx.fillRect(0, 0, w, h);
+  for (let i = 0; i < 9000; i++) {
+    const v = rand(0, 1);
+    ctx.fillStyle = `rgba(${v > 0.5 ? '226,222,210' : '58,55,50'},${rand(0.03, 0.12)})`;
+    ctx.fillRect(rand(0, w), rand(0, h), rand(1, 3), rand(1, 3));
+  }
+  ctx.strokeStyle = 'rgba(76,72,66,0.26)';
+  ctx.lineWidth = 2;
+  for (let i = 0; i < 6; i++) {
+    ctx.beginPath();
+    let x = rand(0, w);
+    let y = rand(0, h);
+    ctx.moveTo(x, y);
+    for (let j = 0; j < 5; j++) {
+      x += rand(-45, 45);
+      y += rand(25, 70);
+      ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+}, { repeat: [7, 7] });
+
+TEX.sidewalkDay = canvasTexture(512, 512, (ctx, w, h) => {
+  ctx.fillStyle = '#c1b9a8';
+  ctx.fillRect(0, 0, w, h);
+  const n = 4;
+  const cell = w / n;
+  for (let y = 0; y < n; y++) {
+    for (let x = 0; x < n; x++) {
+      const v = rand(-8, 8);
+      ctx.fillStyle = `rgb(${195 + v},${187 + v},${170 + v})`;
+      ctx.fillRect(x * cell + 2, y * cell + 2, cell - 4, cell - 4);
+      ctx.fillStyle = 'rgba(255,255,255,0.11)';
+      ctx.fillRect(x * cell + 6, y * cell + 5, cell - 12, 2);
+    }
+  }
+  ctx.strokeStyle = 'rgba(142,134,118,0.55)';
+  ctx.lineWidth = 4;
+  for (let i = 0; i <= n; i++) {
+    ctx.beginPath();
+    ctx.moveTo(i * cell, 0);
+    ctx.lineTo(i * cell, h);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(0, i * cell);
+    ctx.lineTo(w, i * cell);
+    ctx.stroke();
+  }
+  for (let i = 0; i < 350; i++) {
+    ctx.fillStyle = `rgba(110,104,92,${rand(0.02, 0.07)})`;
+    ctx.fillRect(rand(0, w), rand(0, h), rand(1, 3), rand(1, 2));
+  }
+}, { repeat: [7, 7] });
+
+TEX.stoneAlleyDay = canvasTexture(512, 512, (ctx, w, h) => {
+  ctx.fillStyle = '#a69e8e';
+  ctx.fillRect(0, 0, w, h);
+  const n = 5;
+  const cell = w / n;
+  for (let y = 0; y < n; y++) {
+    for (let x = 0; x < n; x++) {
+      ctx.fillStyle = `rgb(${rand(156, 174)},${rand(148, 166)},${rand(132, 150)})`;
+      ctx.fillRect(x * cell + 2, y * cell + 2, cell - 4, cell - 4);
+    }
+  }
+  ctx.strokeStyle = 'rgba(102,94,82,0.55)';
+  ctx.lineWidth = 3;
+  for (let i = 0; i <= n; i++) {
+    ctx.beginPath(); ctx.moveTo(i * cell, 0); ctx.lineTo(i * cell, h); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, i * cell); ctx.lineTo(w, i * cell); ctx.stroke();
+  }
+}, { repeat: [2, 5] });
 
 TEX.asphalt = canvasTexture(512, 512, (ctx, w, h) => {
   ctx.fillStyle = '#2a3140';
@@ -3560,6 +3781,10 @@ const M = {
   rainPuddle: toon(0x203042),
 };
 
+M.asphalt.userData.weatherMaps = { rain: TEX.asphalt, sun: TEX.asphaltDay };
+M.sidewalk.userData.weatherMaps = { rain: TEX.sidewalk, sun: TEX.sidewalkDay };
+M.stoneAlley.userData.weatherMaps = { rain: TEX.stoneAlley, sun: TEX.stoneAlleyDay };
+
 const SIDEWALK_TOP = 0.16;
 const STORE_X0 = -4.75;
 const STORE_X1 = 1.18;
@@ -3960,11 +4185,12 @@ const DOOR = { left: null, right: null, open: 0, target: 0 };
     streak.position.set(x - w * 0.16, 1.55, glassZ + 0.004);
     streak.rotation.z = 0.5;
     frontKit.add(streak);
-    texturedPlane(frontKit, TEX.glassRain, w, 2.08, x, 1.51, glassZ + 0.009, {
+    const glassRain = texturedPlane(frontKit, TEX.glassRain, w, 2.08, x, 1.51, glassZ + 0.009, {
       transparent: true,
       opacity: 0.55,
       depthWrite: false,
     });
+    glassRain.userData.rainOnly = true;
   });
   // window decal / opening-hours sticker
   texturedPlane(frontKit, TEX.glassDecal, 1.02, 0.383, -2.3, 1.33, glassZ + 0.01, {
@@ -4038,9 +4264,10 @@ const signKit = kit('13-便利店招牌', 3.05, { fromY: -0.75, scaleFrom: 0.92,
   makeGlowSprite(0xffe7b6, 2.4, -3.8, 3.1, -0.55, 0.1, signKit);
   makeGlowSprite(0xffe7b6, 1.8, 0.2, 3.1, -0.55, 0.08, signKit);
   // a vivid green neon underline turns the fascia into a real lightbox
-  box(signKit, M.neonGreen, 5.28, 0.022, 0.022, STORE_CX, 2.715, -0.755, {
+  const neonUnderline = box(signKit, M.neonGreen, 5.28, 0.022, 0.022, STORE_CX, 2.715, -0.755, {
     cast: false, receive: false,
   });
+  neonUnderline.userData.rainOnly = true;
   makeGlowSprite(0x6effc1, 3.6, STORE_CX, 2.72, -0.65, 0.08, signKit);
   // projecting vertical box sign
   box(signKit, M.metalDark, 0.5, 1.42, 0.12, 1.42, 2.58, -1.25, { outline: 0.009 });
@@ -4862,6 +5089,7 @@ const detailKit = kit('25-杂志架与ATM', 2.4, { fromY: -0.7, scaleFrom: 0.93 
     })
   );
   openNeon.position.set(0.64, 1.54, -1.02);
+  openNeon.userData.rainOnly = true;
   detailKit.add(openNeon);
   makeGlowSprite(0xff6e96, 0.8, 0.64, 1.54, -1.0, 0.2, detailKit);
   // cyan ATM neon above the left window line
@@ -4876,6 +5104,7 @@ const detailKit = kit('25-杂志架与ATM', 2.4, { fromY: -0.7, scaleFrom: 0.93 
     })
   );
   atmNeon.position.set(-3.72, 2.3, -1.02);
+  atmNeon.userData.rainOnly = true;
   detailKit.add(atmNeon);
   makeGlowSprite(0x67eaff, 0.9, -3.72, 2.3, -1.0, 0.22, detailKit);
   // small warm pendant lamps inside the glazed frontage
@@ -5781,6 +6010,328 @@ const alleyKit = kit('39-小巷入口', 3.66, { fromY: -0.85, scaleFrom: 0.92 })
 });
 
 // ------------------------------------------------------------
+// Street greenery, flowers and sunny-day props
+// ------------------------------------------------------------
+const LEAF_MATS = [
+  toon(0x2f6d35, { soft: true, flatShading: true }),
+  toon(0x437e3c, { soft: true, flatShading: true }),
+  toon(0x235a2d, { soft: true, flatShading: true }),
+  toon(0x5b9c48, { soft: true, flatShading: true }),
+];
+const FLOWER_MATS = [
+  toon(0xff7f94), toon(0xffcf52), toon(0xffffff), toon(0xff9b47), toon(0xb58ae8),
+];
+
+function addFlower(parent, x, y, z, colorIndex = 0, scale = 1) {
+  cylinder(parent, toon(0x4b8a43), 0.007 * scale, 0.009 * scale, 0.24 * scale, x, y + 0.12 * scale, z, { seg: 5, cast: false, receive: false });
+  const mat = FLOWER_MATS[colorIndex % FLOWER_MATS.length];
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 5) * TAU;
+    sphere(parent, mat, 0.035 * scale, x + Math.cos(a) * 0.035 * scale, y + 0.24 * scale, z + Math.sin(a) * 0.035 * scale, { seg: 6, cast: false });
+  }
+  sphere(parent, basic(0xffe08a), 0.027 * scale, x, y + 0.25 * scale, z, { seg: 6, cast: false });
+}
+
+function addTree(parent, x, z, scale = 1, planterSize = 0.74) {
+  const base = SIDEWALK_TOP;
+  box(parent, M.concrete, planterSize, 0.3, planterSize, x, base + 0.15, z, { outline: 0.012 });
+  box(parent, toon(0x8b6446), planterSize - 0.08, 0.055, planterSize - 0.08, x, base + 0.32, z, { cast: false });
+  box(parent, toon(0x4b3528), planterSize - 0.14, 0.02, planterSize - 0.14, x, base + 0.355, z, { cast: false });
+  // trunk and a couple of forked branches
+  cylinder(parent, toon(0x8a5c3f), 0.075 * scale, 0.12 * scale, 1.25 * scale, x, base + 0.95 * scale, z, { seg: 8, outline: 0.012 });
+  barBetween(parent, toon(0x805437), [x, base + 1.2 * scale, z], [x - 0.42 * scale, base + 2.0 * scale, z + 0.14 * scale], 0.045 * scale);
+  barBetween(parent, toon(0x805437), [x, base + 1.42 * scale, z], [x + 0.38 * scale, base + 2.15 * scale, z - 0.1 * scale], 0.04 * scale);
+  barBetween(parent, toon(0x805437), [x + 0.05, base + 1.7 * scale, z], [x + 0.08, base + 2.35 * scale, z + 0.18 * scale], 0.035 * scale);
+  const clumps = [
+    [0, 2.25, 0, 0.62, 0],
+    [-0.5, 2.0, 0.18, 0.48, 1],
+    [0.5, 2.05, -0.12, 0.5, 2],
+    [-0.22, 2.55, -0.15, 0.45, 3],
+    [0.28, 2.6, 0.18, 0.42, 1],
+    [0.02, 2.0, -0.4, 0.4, 0],
+    [-0.63, 2.36, 0.32, 0.34, 2],
+    [0.63, 2.34, 0.3, 0.35, 0],
+    [0.0, 2.84, 0.02, 0.36, 1],
+  ];
+  clumps.forEach(([dx, y, dz, r, mi]) => {
+    const mesh = new THREE.Mesh(new THREE.IcosahedronGeometry(r * scale, 1), LEAF_MATS[mi]);
+    mesh.position.set(x + dx * scale, base + y * scale, z + dz * scale);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    addOutline(mesh, 0.018);
+    parent.add(mesh);
+  });
+  // a few soft blossoms / berries
+  for (let i = 0; i < 7; i++) {
+    sphere(parent, i % 3 === 0 ? toon(0xf7e5a2) : toon(0xffb7c5), 0.035 * scale, x + rand(-0.55, 0.55) * scale, base + rand(2.0, 2.65) * scale, z + rand(-0.45, 0.45) * scale, { seg: 6, cast: false });
+  }
+  // little flowers in the planter
+  for (let i = 0; i < 5; i++) {
+    addFlower(parent, x + rand(-0.25, 0.25) * planterSize, base + 0.34, z + planterSize * 0.48 + rand(-0.04, 0.04), i, 0.7);
+  }
+}
+
+function addFlowerBox(parent, x, z, w = 1.0) {
+  const y = SIDEWALK_TOP + 0.14;
+  box(parent, M.wood, w, 0.25, 0.28, x, y, z, { outline: 0.012 });
+  box(parent, toon(0x4b3528), w - 0.1, 0.03, 0.19, x, y + 0.12, z, { cast: false });
+  for (let i = 0; i < 7; i++) {
+    const px = x - w / 2 + 0.13 + i * ((w - 0.26) / 6);
+    sphere(parent, LEAF_MATS[i % 2], 0.1, px, y + 0.18, z + rand(-0.03, 0.03), { seg: 6, cast: false });
+    addFlower(parent, px, y + 0.15, z + 0.03, i, 0.8);
+  }
+}
+
+const greeneryKit = kit('60-街角绿植', 0, { fromY: 0, scaleFrom: 1 });
+{
+  // main street tree behind the far-side guardrail
+  addTree(greeneryKit, 6.3, 3.65, 0.62, 0.54);
+  // small rounded shrub at the left-side alley corner
+  addTree(greeneryKit, -6.12, 0.1, 0.45, 0.44);
+  // flower boxes under the shop windows
+  addFlowerBox(greeneryKit, -3.95, -0.5, 1.0);
+  addFlowerBox(greeneryKit, -2.1, -0.5, 1.0);
+  // flowers at the base of the street lamp
+  box(greeneryKit, M.concrete, 0.9, 0.18, 0.55, -3.68, SIDEWALK_TOP + 0.09, 1.85, { outline: 0.01 });
+  for (let i = 0; i < 8; i++) {
+    addFlower(greeneryKit, -3.68 + rand(-0.34, 0.34), SIDEWALK_TOP + 0.18, 1.85 + rand(-0.16, 0.16), i, 0.8);
+  }
+  // hanging flower basket on the lamp arm
+  const hx = -3.68;
+  const hz = 2.25;
+  cylinder(greeneryKit, M.metalDark, 0.012, 0.012, 0.55, hx, 3.78, hz, { seg: 5, cast: false });
+  cylinder(greeneryKit, M.cardboard, 0.16, 0.12, 0.22, hx, 3.42, hz, { seg: 12, outline: 0.01 });
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * TAU;
+    sphere(greeneryKit, LEAF_MATS[i % 2], 0.11, hx + Math.cos(a) * 0.13, 3.47, hz + Math.sin(a) * 0.13, { seg: 6 });
+    addFlower(greeneryKit, hx + Math.cos(a) * 0.16, 3.4, hz + Math.sin(a) * 0.16, i, 0.65);
+  }
+}
+
+const sunnyDecor = new THREE.Group();
+sunnyDecor.name = 'sunny-day-decor';
+world.add(sunnyDecor);
+
+// Balloons tied to the bicycle basket.
+const balloonPivot = new THREE.Group();
+balloonPivot.position.set(2.55, SIDEWALK_TOP + 0.82, -0.35);
+sunnyDecor.add(balloonPivot);
+{
+  const balloonColors = [0xff7e8b, 0xffd152, 0x67c8ee];
+  balloonColors.forEach((color, i) => {
+    const bx = -0.22 + i * 0.2;
+    const by = 0.92 + (i === 1 ? 0.2 : 0);
+    barBetween(balloonPivot, M.metalDark, [0, 0.03, 0], [bx, by - 0.2, 0.01], 0.007);
+    const balloon = new THREE.Mesh(new THREE.SphereGeometry(0.14, 12, 10), toon(color, { soft: true }));
+    balloon.position.set(bx, by, 0.01);
+    balloon.scale.set(1, 1.22, 1);
+    balloon.castShadow = true;
+    balloonPivot.add(balloon);
+    const knot = new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.08, 8), toon(color));
+    knot.position.set(bx, by - 0.19, 0.01);
+    knot.rotation.z = Math.PI;
+    balloonPivot.add(knot);
+    const shine = new THREE.Mesh(new THREE.SphereGeometry(0.028, 8, 6), basic(0xffffff));
+    shine.position.set(bx - 0.05, by + 0.07, 0.105);
+    balloonPivot.add(shine);
+  });
+}
+
+// Hand-painted sunny posters and cute stickers.
+TEX.sunnyPoster = canvasTexture(512, 720, (ctx, w, h) => {
+  const sky = ctx.createLinearGradient(0, 0, 0, h);
+  sky.addColorStop(0, '#88d3f4');
+  sky.addColorStop(0.48, '#dff3f7');
+  sky.addColorStop(1, '#ffe8a8');
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, w, h);
+  ctx.fillStyle = '#f6c84f';
+  ctx.beginPath(); ctx.arc(90, 110, 52, 0, TAU); ctx.fill();
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * TAU;
+    ctx.save(); ctx.translate(90, 110); ctx.rotate(a);
+    ctx.fillStyle = '#f7d66e';
+    ctx.fillRect(-7, -78, 14, 22);
+    ctx.restore();
+  }
+  ctx.fillStyle = '#55945e';
+  ctx.beginPath(); ctx.ellipse(w / 2, h - 90, 250, 120, 0, 0, TAU); ctx.fill();
+  // sunflowers
+  for (let i = 0; i < 5; i++) {
+    const fx = 105 + i * 77;
+    const fy = 480 + (i % 2) * 50;
+    ctx.strokeStyle = '#3c7c46'; ctx.lineWidth = 8;
+    ctx.beginPath(); ctx.moveTo(fx, fy); ctx.lineTo(fx - 10, fy + 125); ctx.stroke();
+    ctx.fillStyle = '#f3b834';
+    for (let p = 0; p < 10; p++) {
+      const a = (p / 10) * TAU;
+      ctx.beginPath();
+      ctx.ellipse(fx + Math.cos(a) * 28, fy + Math.sin(a) * 28, 15, 8, a, 0, TAU);
+      ctx.fill();
+    }
+    ctx.fillStyle = '#6b4528';
+    ctx.beginPath(); ctx.arc(fx, fy, 19, 0, TAU); ctx.fill();
+  }
+  ctx.fillStyle = '#285c46';
+  ctx.font = `900 73px ${FONT_JP}`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('夏まつり', w / 2, 188);
+  ctx.fillStyle = '#fffdf1';
+  ctx.font = `700 28px ${FONT_JP}`;
+  ctx.fillText('ひまわりと、こども縁日', w / 2, 246);
+  ctx.fillStyle = '#e76c54';
+  ctx.font = `800 24px ${FONT_JP}`;
+  ctx.fillText('星見町内会', w / 2, 650);
+});
+
+TEX.glassSun = canvasTexture(512, 1024, (ctx, w, h) => {
+  ctx.clearRect(0, 0, w, h);
+  const sky = ctx.createLinearGradient(0, 0, 0, h);
+  sky.addColorStop(0, 'rgba(193,231,255,0.18)');
+  sky.addColorStop(0.3, 'rgba(215,242,255,0.08)');
+  sky.addColorStop(0.62, 'rgba(255,247,220,0.055)');
+  sky.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, w, h);
+  ctx.strokeStyle = 'rgba(245,253,255,0.17)';
+  ctx.lineWidth = 10;
+  [0.18, 0.5, 0.8].forEach((t) => {
+    ctx.beginPath();
+    ctx.moveTo(w * t - 60, h);
+    ctx.lineTo(w * t + 175, 0);
+    ctx.stroke();
+  });
+  ctx.fillStyle = 'rgba(255,248,218,0.13)';
+  ctx.beginPath();
+  ctx.ellipse(360, 215, 100, 32, -0.35, 0, TAU);
+  ctx.fill();
+});
+
+TEX.sunnySticker = canvasTexture(256, 256, (ctx, w, h) => {
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = '#fff9dc';
+  ctx.beginPath(); ctx.arc(w / 2, h / 2, 112, 0, TAU); ctx.fill();
+  ctx.strokeStyle = '#f1b943'; ctx.lineWidth = 8;
+  ctx.beginPath(); ctx.arc(w / 2, h / 2, 103, 0, TAU); ctx.stroke();
+  ctx.fillStyle = '#ffcf51';
+  for (let i = 0; i < 10; i++) {
+    const a = (i / 10) * TAU;
+    ctx.beginPath();
+    ctx.ellipse(w / 2 + Math.cos(a) * 73, h / 2 + Math.sin(a) * 73, 20, 10, a, 0, TAU);
+    ctx.fill();
+  }
+  ctx.fillStyle = '#ffd76b';
+  ctx.beginPath(); ctx.arc(w / 2, h / 2, 55, 0, TAU); ctx.fill();
+  ctx.fillStyle = '#72503a';
+  ctx.beginPath(); ctx.arc(w / 2 - 19, h / 2 - 4, 6, 0, TAU); ctx.fill();
+  ctx.beginPath(); ctx.arc(w / 2 + 19, h / 2 - 4, 6, 0, TAU); ctx.fill();
+  ctx.strokeStyle = '#72503a'; ctx.lineWidth = 5;
+  ctx.beginPath(); ctx.arc(w / 2, h / 2 + 14, 23, 0.15, Math.PI - 0.15); ctx.stroke();
+  ctx.fillStyle = '#4a8065';
+  ctx.font = `800 21px ${FONT_EN}`;
+  ctx.textAlign = 'center';
+  ctx.fillText('SUNNY DAY', w / 2, 215);
+});
+
+// Poster over the side-wall notice board and left lobby board.
+const sunnyBoardPoster = texturedPlane(sunnyDecor, TEX.sunnyPoster, 0.47, 0.62, STORE_X1 + 0.042, 2.36, -2.34, {
+  ry: Math.PI / 2,
+  transparent: false,
+});
+sunnyBoardPoster.userData.sunnyOnly = true;
+texturedPlane(sunnyDecor, TEX.sunnyPoster, 0.46, 0.6, STORE_X0 - 0.045, 1.7, -2.48, {
+  ry: -Math.PI / 2,
+});
+// small stickers on the glass
+texturedPlane(sunnyDecor, TEX.sunnySticker, 0.34, 0.34, -3.58, 1.04, -0.915, { transparent: true });
+texturedPlane(sunnyDecor, TEX.sunnySticker, 0.27, 0.27, 0.72, 1.02, -0.915, { transparent: true });
+// soft natural reflections on the clean windows
+[
+  [-3.71, 1.39],
+  [-2.3, 1.37],
+  [-1.05, 1.07],
+].forEach(([x, w]) => {
+  texturedPlane(sunnyDecor, TEX.glassSun, w, 2.08, x, 1.51, -0.927, {
+    transparent: true,
+    opacity: 0.5,
+    depthWrite: false,
+  });
+});
+
+// little flowers in the bicycle basket
+for (let i = 0; i < 4; i++) {
+  cylinder(sunnyDecor, toon(0x4d8a43), 0.006, 0.008, 0.28, 2.55 + rand(-0.1, 0.1), SIDEWALK_TOP + 1.17, -0.3, { seg: 5, cast: false, receive: false });
+  sphere(sunnyDecor, FLOWER_MATS[i % FLOWER_MATS.length], 0.055, 2.55 + rand(-0.1, 0.1), SIDEWALK_TOP + 1.31, -0.3, { seg: 6, cast: false });
+}
+
+// festival bunting above the alley gate
+{
+  const points = [
+    new THREE.Vector3(-6.55, SIDEWALK_TOP + 2.95, -0.94),
+    new THREE.Vector3(-5.86, SIDEWALK_TOP + 2.82, -0.94),
+    new THREE.Vector3(-5.17, SIDEWALK_TOP + 2.95, -0.94),
+  ];
+  const curve = new THREE.CatmullRomCurve3(points);
+  const stringGeo = new THREE.TubeGeometry(curve, 24, 0.008, 4, false);
+  const stringMesh = new THREE.Mesh(stringGeo, M.metalDark);
+  sunnyDecor.add(stringMesh);
+  const flagColors = [0xff8797, 0xffd15a, 0x75c7ea, 0x91d16c, 0xf0a1cc, 0xffa95d];
+  const shape = new THREE.Shape();
+  shape.moveTo(-0.1, 0);
+  shape.lineTo(0.1, 0);
+  shape.lineTo(0, -0.22);
+  shape.closePath();
+  const flagGeo = new THREE.ShapeGeometry(shape);
+  for (let i = 0; i < 6; i++) {
+    const t = 0.08 + i * 0.16;
+    const p = curve.getPoint(t);
+    const flag = new THREE.Mesh(flagGeo, toon(flagColors[i], { side: THREE.DoubleSide }));
+    flag.position.copy(p);
+    flag.position.y -= 0.02;
+    flag.rotation.z = 0.06 * Math.sin(i * 2.1);
+    sunnyDecor.add(flag);
+  }
+}
+
+// Warm sunny light patches (actual shadows still do most of the work).
+function sunnyPatch(x, z, w, d, opacity = 0.08, y = 0.172) {
+  const mat = new THREE.ShaderMaterial({
+    uniforms: {
+      uColor: { value: new THREE.Color(0xffe7b0) },
+      uOpacity: { value: opacity },
+    },
+    vertexShader: `
+      varying vec2 vUv;
+      void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }
+    `,
+    fragmentShader: `
+      uniform vec3 uColor;
+      uniform float uOpacity;
+      varying vec2 vUv;
+      void main() {
+        float d = length((vUv - 0.5) * vec2(1.0, 1.35)) * 2.0;
+        float a = (1.0 - smoothstep(0.1, 1.0, d)) * uOpacity;
+        gl_FragColor = vec4(uColor, a);
+      }
+    `,
+    transparent: true,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+  });
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, d), mat);
+  mesh.rotation.x = -Math.PI / 2;
+  mesh.position.set(x, y, z);
+  mesh.renderOrder = 5;
+  sunnyDecor.add(mesh);
+  return mesh;
+}
+sunnyPatch(0.2, -0.25, 1.25, 0.7, 0.075);
+sunnyPatch(-2.8, 0.5, 2.2, 0.75, 0.055);
+sunnyPatch(2.65, 4.15, 1.5, 0.9, 0.045, 0.054);
+
+// ------------------------------------------------------------
 // Static geometry batching
 // ------------------------------------------------------------
 // The diorama is built from hundreds of small boxes, cans and strips. Merging
@@ -6029,81 +6580,480 @@ for (let i = 0; i < 7; i++) {
 }
 
 // ------------------------------------------------------------
-// Assembly timeline + interaction
+// Sunny sky: soft anime clouds, sun haze and floating motes
 // ------------------------------------------------------------
-const clock = new THREE.Clock();
-const params = new URLSearchParams(window.location.search);
-const STILL = params.has('still');
-let assemblyStart = performance.now() + 180;
-let frozenAssemblyTime = null;
-let assemblyDone = false;
-let shadowFrozen = false;
-let startedInteraction = false;
-let introDone = false;
-let doorOpen = 0;
-let doorPhase = 0;
-
-controls.addEventListener('start', () => {
-  startedInteraction = true;
-  controls.autoRotate = false;
-});
-renderer.domElement.addEventListener('wheel', () => {
-  startedInteraction = true;
-  controls.autoRotate = false;
-}, { passive: true });
-
-function updateAssembly(now) {
-  const t = frozenAssemblyTime !== null ? frozenAssemblyTime : (now - assemblyStart) / 1000;
-  for (let i = 0; i < kits.length; i++) {
-    const g = kits[i];
-    const a = g.userData.assemble;
-    const p = clamp((t - a.delay) / a.duration, 0, 1);
-    if (p <= 0) {
-      g.visible = false;
-      g.position.y = a.fromY;
-      g.scale.setScalar(a.scaleFrom);
-      continue;
-    }
-    g.visible = true;
-    const e = easeOutCubic(p);
-    g.position.y = a.fromY * (1 - e);
-    const s = a.scaleFrom + (1 - a.scaleFrom) * e;
-    g.scale.setScalar(s);
-    if (a.spin) g.rotation.y = a.spin * (1 - e);
-    if (p >= 1) {
-      g.position.y = 0;
-      g.scale.setScalar(1);
-      if (a.spin) g.rotation.y = 0;
-    }
-  }
-
-  // rain fades in once the street is mostly assembled
-  const rainP = clamp((t - 4.55) / 1.7, 0, 1);
-  rainMaterial.uniforms.uOpacity.value = rainP;
-  splashGroup.visible = rainP > 0.01;
-  lampShaft.visible = rainP > 0.02;
-  mistPatches.forEach((m) => { m.visible = rainP > 0.02; });
-  doorPhase = t > 5.75 ? t : 0;
-
-  if (!STILL && !startedInteraction && t > 6.0) {
-    controls.autoRotate = true;
-  }
-  if (!assemblyDone && t > 6.6) {
-    assemblyDone = true;
-    controls.autoRotate = !STILL && !startedInteraction;
-  }
-  return t;
+function makeCloudTexture(variant) {
+  return canvasTexture(512, 256, (ctx, w, h) => {
+    ctx.clearRect(0, 0, w, h);
+    const puffs = variant === 0
+      ? [[122, 156, 57], [178, 125, 78], [246, 116, 88], [316, 132, 72], [378, 152, 52], [228, 164, 70]]
+      : variant === 1
+        ? [[140, 150, 60], [200, 122, 82], [270, 128, 90], [340, 142, 62], [400, 160, 44], [252, 160, 66]]
+        : [[110, 148, 54], [168, 120, 72], [232, 112, 82], [300, 128, 74], [360, 146, 54], [210, 160, 68]];
+    // cool shadow side, offset down and right
+    ctx.fillStyle = 'rgba(149, 185, 209, 0.62)';
+    puffs.forEach(([x, y, r]) => {
+      ctx.beginPath(); ctx.arc(x + 4, y + 12, r * 1.01, 0, TAU); ctx.fill();
+    });
+    // flat-ish cloudy base
+    ctx.fillStyle = 'rgba(238, 247, 253, 0.92)';
+    ctx.beginPath();
+    ctx.ellipse(258, 177, 185, 36, 0, 0, TAU);
+    ctx.fill();
+    // crisp white puffs (with a soft outer glow)
+    ctx.save();
+    ctx.shadowColor = 'rgba(255,255,255,0.75)';
+    ctx.shadowBlur = 9;
+    ctx.fillStyle = 'rgba(255,255,255,0.98)';
+    puffs.forEach(([x, y, r]) => {
+      ctx.beginPath(); ctx.arc(x, y - 3, r, 0, TAU); ctx.fill();
+    });
+    ctx.restore();
+    // lit tops
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    puffs.slice(0, 3).forEach(([x, y, r]) => {
+      ctx.beginPath(); ctx.arc(x - r * 0.16, y - r * 0.2, r * 0.55, 0, TAU); ctx.fill();
+    });
+    // blue-grey underside, clipped to cloud pixels
+    ctx.globalCompositeOperation = 'source-atop';
+    const shade = ctx.createLinearGradient(0, 145, 0, 220);
+    shade.addColorStop(0, 'rgba(174, 207, 226, 0)');
+    shade.addColorStop(0.65, 'rgba(164, 199, 220, 0.24)');
+    shade.addColorStop(1, 'rgba(139, 178, 203, 0.55)');
+    ctx.fillStyle = shade;
+    ctx.fillRect(0, 130, w, 110);
+    ctx.globalCompositeOperation = 'source-over';
+  });
 }
 
-function updateDoors(dt, t) {
-  // A short welcome: the automatic doors part once the model is complete.
-  let target = 0;
-  if (t > 6.1 && t < 8.45) target = 1;
-  if (t > 8.45) target = 0;
-  doorOpen += (target - doorOpen) * Math.min(1, dt * 2.4);
-  if (DOOR.left && DOOR.right) {
-    DOOR.left.position.x = -0.58 * doorOpen;
-    DOOR.right.position.x = 0.58 * doorOpen;
+const cloudGroup = new THREE.Group();
+cloudGroup.name = 'sunny-cloud-dome';
+scene.add(cloudGroup);
+
+const cloudSkyTex = canvasTexture(2048, 1024, (ctx, w, h) => {
+  ctx.clearRect(0, 0, w, h);
+  function puffCloud(cx, cy, scale, alpha) {
+    const puffs = [
+      [-88, 4, 34], [-53, -8, 45], [-16, -18, 52], [23, -12, 49],
+      [58, 2, 40], [31, 18, 44], [-27, 18, 41], [83, 16, 27],
+    ];
+    // cool blue-grey underside
+    puffs.forEach(([dx, dy, r]) => {
+      ctx.fillStyle = `rgba(154, 188, 210, ${alpha * 0.34})`;
+      ctx.beginPath();
+      ctx.arc(cx + dx * scale, cy + dy * scale + 10 * scale, r * scale * 1.05, 0, TAU);
+      ctx.fill();
+    });
+    // bright puffy body
+    puffs.forEach(([dx, dy, r]) => {
+      const x = cx + dx * scale;
+      const y = cy + dy * scale;
+      const rr = r * scale;
+      const g = ctx.createRadialGradient(x - rr * 0.2, y - rr * 0.45, rr * 0.1, x, y, rr);
+      g.addColorStop(0, `rgba(255,255,255,${Math.min(1, alpha * 1.05)})`);
+      g.addColorStop(0.62, `rgba(255,255,255,${alpha * 0.94})`);
+      g.addColorStop(0.88, `rgba(247,252,255,${alpha * 0.44})`);
+      g.addColorStop(1, 'rgba(240,249,255,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(x, y, rr, 0, TAU); ctx.fill();
+    });
+    // sunlit shoulders
+    [-54, -6, 38].forEach((dx, i) => {
+      const x = cx + dx * scale;
+      const y = cy - (14 + i * 3) * scale;
+      const rr = (32 - i * 4) * scale;
+      const g = ctx.createRadialGradient(x, y, 2, x, y, rr);
+      g.addColorStop(0, `rgba(255,255,255,${alpha * 0.55})`);
+      g.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(x, y, rr, 0, TAU); ctx.fill();
+    });
+  }
+  const clouds = [
+    [220, 265, 0.38, 0.86], [560, 205, 0.32, 0.8],
+    [840, 330, 0.27, 0.72], [1120, 245, 0.4, 0.86],
+    [1460, 315, 0.28, 0.74], [1740, 235, 0.34, 0.82],
+    [1940, 390, 0.24, 0.65], [390, 460, 0.25, 0.64],
+    [710, 520, 0.21, 0.55], [1280, 500, 0.23, 0.56],
+    [1580, 470, 0.19, 0.5], [980, 585, 0.2, 0.48],
+    [80, 355, 0.22, 0.55], [1840, 620, 0.17, 0.4],
+  ];
+  clouds.forEach(([x, y, s, a]) => puffCloud(x, y, s, a));
+});
+const cloudMat = new THREE.MeshBasicMaterial({
+  map: cloudSkyTex,
+  transparent: true,
+  opacity: 0,
+  side: THREE.BackSide,
+  depthWrite: false,
+  depthTest: true,
+  fog: false,
+  toneMapped: false,
+});
+const cloudDome = new THREE.Mesh(new THREE.SphereGeometry(61.2, 48, 24), cloudMat);
+cloudDome.name = 'cloud-sky-dome';
+cloudDome.renderOrder = -90;
+cloudGroup.add(cloudDome);
+
+// A handful of guaranteed soft clouds in the initial composition.
+const cloudSprites = [];
+{
+  camera.updateMatrixWorld(true);
+  const spriteTextures = [makeCloudTexture(0), makeCloudTexture(1), makeCloudTexture(2)];
+  const screenClouds = [
+    [-0.58, 0.68, 52, 8.6, 4.3, 0],
+    [0.53, 0.72, 52, 7.2, 3.7, 1],
+    [-0.08, 0.87, 56, 10.2, 4.8, 2],
+    [0.90, 0.50, 50, 6.2, 3.2, 1],
+    [-0.92, 0.46, 50, 6.5, 3.3, 2],
+  ];
+  const tmp = new THREE.Vector3();
+  screenClouds.forEach(([nx, ny, dist, sx, sy, ti], i) => {
+    tmp.set(nx, ny, 0.35).unproject(camera);
+    tmp.sub(camera.position).normalize();
+    const pos = camera.position.clone().addScaledVector(tmp, dist);
+    const mat = new THREE.SpriteMaterial({
+      map: spriteTextures[ti],
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+      depthTest: true,
+      fog: false,
+      toneMapped: false,
+    });
+    const s = new THREE.Sprite(mat);
+    s.position.copy(pos);
+    s.scale.set(sx, sy, 1);
+    s.renderOrder = -80 + i;
+    s.userData.cloudBaseOpacity = 0.72 - i * 0.045;
+    cloudGroup.add(s);
+    cloudSprites.push(s);
+  });
+}
+
+// Warm dust motes for a little air / sunlight atmosphere.
+const dustTex = canvasTexture(64, 64, (ctx, w, h) => {
+  const g = ctx.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w / 2);
+  g.addColorStop(0, 'rgba(255,250,226,0.95)');
+  g.addColorStop(0.35, 'rgba(255,244,206,0.55)');
+  g.addColorStop(1, 'rgba(255,240,190,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, w, h);
+});
+const DUST_COUNT = 95;
+const dustData = [];
+const dustGeo = new THREE.BufferGeometry();
+{
+  const arr = new Float32Array(DUST_COUNT * 3);
+  for (let i = 0; i < DUST_COUNT; i++) {
+    const x = rand(-5.8, 4.4);
+    const y = rand(0.5, 4.2);
+    const z = rand(-4.6, 2.3);
+    arr[i * 3] = x;
+    arr[i * 3 + 1] = y;
+    arr[i * 3 + 2] = z;
+    dustData.push({ x, y, z, phase: Math.random() * TAU, speed: rand(0.04, 0.14) });
+  }
+  dustGeo.setAttribute('position', new THREE.BufferAttribute(arr, 3));
+}
+const dustMat = new THREE.PointsMaterial({
+  map: dustTex,
+  color: 0xfff0c7,
+  size: 0.075,
+  transparent: true,
+  opacity: 0,
+  depthWrite: false,
+  blending: THREE.AdditiveBlending,
+  sizeAttenuation: true,
+  fog: false,
+});
+const sunnyDust = new THREE.Points(dustGeo, dustMat);
+sunnyDust.frustumCulled = false;
+sunnyDust.renderOrder = 7;
+scene.add(sunnyDust);
+
+// Sunlit decals are not allowed to affect the baked shadow map.
+sunnyDecor.traverse((o) => {
+  if (o.isMesh) o.castShadow = false;
+});
+
+// ------------------------------------------------------------
+// Weather blending / interaction
+// ------------------------------------------------------------
+const clock = new THREE.Clock();
+let shadowFrozen = false;
+
+// ------------------------------------------------------------
+// Weather-dependent lighting records
+// ------------------------------------------------------------
+const weatherLights = [];
+scene.traverse((o) => {
+  if (o.isAmbientLight) {
+    weatherLights.push({
+      type: 'ambient',
+      light: o,
+      rainIntensity: o.intensity,
+      dayIntensity: 0.1,
+      rainColor: o.color.clone(),
+      dayColor: new THREE.Color(0xeaf5ff),
+    });
+  } else if (o.isHemisphereLight) {
+    weatherLights.push({
+      type: 'hemi',
+      light: o,
+      rainIntensity: o.intensity,
+      dayIntensity: 0.16,
+      rainColor: o.color.clone(),
+      dayColor: new THREE.Color(0xc3e5ff),
+      rainGroundColor: o.groundColor.clone(),
+      dayGroundColor: new THREE.Color(0xffdfb2),
+    });
+  } else if (o.isDirectionalLight) {
+    if (o.name === 'sunKey') {
+      weatherLights.push({
+        type: 'directional',
+        light: o,
+        rainIntensity: o.intensity,
+        dayIntensity: 1.65,
+        rainColor: o.color.clone(),
+        dayColor: new THREE.Color(0xffdca6),
+      });
+    } else if (o.name === 'rimLight') {
+      weatherLights.push({
+        type: 'directional',
+        light: o,
+        rainIntensity: o.intensity,
+        dayIntensity: 0.1,
+        rainColor: o.color.clone(),
+        dayColor: new THREE.Color(0xbddaff),
+      });
+    }
+  } else if (o.isSpotLight) {
+    weatherLights.push({
+      type: 'spot',
+      light: o,
+      rainIntensity: o.intensity,
+      dayIntensity: 0.035,
+      rainColor: o.color.clone(),
+      dayColor: new THREE.Color(0xffe8c0),
+    });
+  } else if (o.isPointLight) {
+    const isDayFill = o.name === 'dayFill';
+    weatherLights.push({
+      type: 'point',
+      light: o,
+      rainIntensity: isDayFill ? 0 : o.intensity,
+      dayIntensity: isDayFill ? 1.1 : o.intensity * 0.3,
+      rainColor: o.color.clone(),
+      dayColor: o.color.clone(),
+    });
+  }
+});
+
+// ------------------------------------------------------------
+// Rain-only pieces
+// ------------------------------------------------------------
+const rainOnlyMeshes = [];
+const glowSprites = [];
+scene.traverse((o) => {
+  if (o.userData && o.userData.rainOnly) {
+    if (o.isSprite) {
+      glowSprites.push(o);
+      o.userData.glowBaseOpacity = o.material.opacity;
+    } else if (o.isMesh) {
+      rainOnlyMeshes.push(o);
+    }
+  }
+  if (o.isMesh && o.material && o.material.map === TEX.caution) {
+    o.userData.rainOnly = true;
+    rainOnlyMeshes.push(o);
+  }
+});
+
+// ------------------------------------------------------------
+// Weather palettes
+// ------------------------------------------------------------
+const SKY_NIGHT = {
+  top: new THREE.Color(0x03050c),
+  horizon: new THREE.Color(0x0c1a2d),
+  bottom: new THREE.Color(0x04070d),
+};
+const SKY_DAY = {
+  top: new THREE.Color(0x1a6ec7),
+  horizon: new THREE.Color(0x99d2f3),
+  bottom: new THREE.Color(0xdfeacb),
+};
+const FOG_NIGHT = new THREE.Color(0x08101c);
+const FOG_DAY = new THREE.Color(0xe7f5ff);
+const TMP_COLOR = new THREE.Color();
+const SUN_NIGHT_POS = new THREE.Vector3(-8.5, 15.5, 12.0);
+const SUN_DAY_POS = new THREE.Vector3(-8.5, 15.5, 12.0);
+
+function smoothMix(a, b, x) {
+  const t = clamp((x - a) / (b - a), 0, 1);
+  return t * t * (3 - 2 * t);
+}
+
+function setGroundMaps(sunny) {
+  const pairs = [
+    [M.asphalt, TEX.asphalt, TEX.asphaltDay],
+    [M.sidewalk, TEX.sidewalk, TEX.sidewalkDay],
+    [M.stoneAlley, TEX.stoneAlley, TEX.stoneAlleyDay],
+  ];
+  pairs.forEach(([mat, rainMap, dayMap]) => {
+    const target = sunny ? dayMap : rainMap;
+    if (mat.map !== target) {
+      mat.map = target;
+      mat.needsUpdate = true;
+    }
+  });
+}
+
+function applyWeather(mix) {
+  const m = clamp(mix, 0, 1);
+  const day = m > 0.5;
+
+  // lights
+  weatherLights.forEach((r) => {
+    r.light.intensity = lerp(r.rainIntensity, r.dayIntensity, m);
+    r.light.color.copy(r.rainColor).lerp(r.dayColor, m);
+    if (r.type === 'hemi') {
+      r.light.groundColor.copy(r.rainGroundColor).lerp(r.dayGroundColor, m);
+    }
+  });
+  // warm sunlight comes from the front-left, replacing the cool moon
+  moon.position.copy(SUN_NIGHT_POS).lerp(SUN_DAY_POS, m);
+  moon.target.position.set(-1.0, 0, -2.0);
+  moon.updateMatrixWorld(true);
+  moon.target.updateMatrixWorld(true);
+
+  // sky / fog / background
+  const skyU = skyDome.material.uniforms;
+  skyU.uTop.value.copy(SKY_NIGHT.top).lerp(SKY_DAY.top, m);
+  skyU.uHorizon.value.copy(SKY_NIGHT.horizon).lerp(SKY_DAY.horizon, m);
+  skyU.uBottom.value.copy(SKY_NIGHT.bottom).lerp(SKY_DAY.bottom, m);
+  scene.background.copy(SKY_NIGHT.bottom).lerp(SKY_DAY.horizon, m);
+  scene.fog.color.copy(FOG_NIGHT).lerp(FOG_DAY, m);
+  scene.fog.density = lerp(0.0165, 0.0042, m);
+
+  // dry sunlit surfaces vs dark wet night surfaces
+  setGroundMaps(day);
+
+  // exposure / bloom / grade
+  renderer.toneMappingExposure = lerp(0.86, 0.9, m);
+  bloomPass.strength = 0.5 * (1 - m);
+  bloomPass.enabled = m < 0.985;
+  gradePass.uniforms.uSaturation.value = lerp(1.28, 1.22, m);
+  gradePass.uniforms.uContrast.value = lerp(1.04, 1.05, m);
+  gradePass.uniforms.uVignette.value = lerp(0.3, 0.12, m);
+
+  // rain fade
+  const rainFade = 1 - smoothMix(0.02, 0.72, m);
+  rainMaterial.uniforms.uOpacity.value = rainFade;
+  rain.visible = rainFade > 0.012;
+  splashGroup.visible = m < 0.72;
+  lampShaft.visible = m < 0.45;
+  lampShaft.material.opacity = rainFade * 0.055;
+  mistPatches.forEach((p) => { p.visible = m < 0.35; });
+  wetKit.visible = m < 0.45;
+  rainOnlyMeshes.forEach((mesh) => { mesh.visible = m < 0.45; });
+
+  // neon halos and light spills
+  glowSprites.forEach((s) => {
+    const a = s.userData.glowBaseOpacity === undefined
+      ? 0.2
+      : s.userData.glowBaseOpacity;
+    s.material.opacity = a * (1 - smoothMix(0.05, 0.62, m));
+    s.visible = s.material.opacity > 0.002;
+  });
+
+  // sunny decor + painted cloud dome
+  sunnyDecor.visible = m > 0.34;
+  cloudGroup.visible = m > 0.015;
+  cloudMat.opacity = 0.55 * smoothMix(0.1, 0.9, m);
+  cloudSprites.forEach((s) => {
+    s.material.opacity = (s.userData.cloudBaseOpacity || 0.7) * smoothMix(0.08, 0.9, m);
+    s.visible = s.material.opacity > 0.002;
+  });
+  sunnyDust.visible = m > 0.08;
+  dustMat.opacity = 0.4 * smoothMix(0.08, 0.9, m);
+
+  // body background / vignette
+  document.body.classList.toggle('sunny', m > 0.5);
+
+  // subtle sunlit wall warmth
+  M.wallCream.color.copy(new THREE.Color(0xd5c6ab)).lerp(new THREE.Color(0xf1e5cd), m);
+  M.wallCreamDark.color.copy(new THREE.Color(0xbcab8f)).lerp(new THREE.Color(0xdcccb1), m);
+}
+
+// ------------------------------------------------------------
+// Weather toggle UI
+// ------------------------------------------------------------
+const btnSunny = document.getElementById('btnSunny');
+const btnRain = document.getElementById('btnRain');
+
+function updateWeatherButtons(mode) {
+  if (btnSunny) {
+    btnSunny.classList.toggle('is-active', mode === 'sunny');
+    btnSunny.setAttribute('aria-pressed', mode === 'sunny' ? 'true' : 'false');
+  }
+  if (btnRain) {
+    btnRain.classList.toggle('is-active', mode === 'rain');
+    btnRain.setAttribute('aria-pressed', mode === 'rain' ? 'true' : 'false');
+  }
+}
+
+function setWeatherMode(mode, instant = false) {
+  const next = mode === 'rain' ? 0 : 1;
+  weatherTransitionFrom = weatherMix;
+  weatherTransitionStart = performance.now();
+  weatherTarget = next;
+  updateWeatherButtons(next > 0.5 ? 'sunny' : 'rain');
+  try {
+    window.localStorage.setItem(WEATHER_KEY, mode);
+  } catch (e) {
+    // file:// and privacy modes may not allow storage
+  }
+  try {
+    const url = new URL(window.location.href);
+    url.searchParams.set('weather', mode);
+    window.history.replaceState(null, '', url.toString());
+  } catch (e) {
+    // ignore history restrictions
+  }
+  if (instant) {
+    weatherMix = next;
+    applyWeather(weatherMix);
+  }
+}
+
+if (btnSunny) btnSunny.addEventListener('click', () => setWeatherMode('sunny'));
+if (btnRain) btnRain.addEventListener('click', () => setWeatherMode('rain'));
+window.addEventListener('keydown', (e) => {
+  if (e.key && e.key.toLowerCase() === 'w') {
+    setWeatherMode(weatherTarget > 0.5 ? 'rain' : 'sunny');
+  }
+});
+
+// ------------------------------------------------------------
+// Warm airborne details
+// ------------------------------------------------------------
+function updateAtmosphere(t, dt, m) {
+  // gentle balloon sway
+  if (sunnyDecor.visible) {
+    balloonPivot.rotation.z = Math.sin(t * 0.75) * 0.05;
+    balloonPivot.rotation.x = Math.sin(t * 0.52 + 1.2) * 0.035;
+    cloudDome.rotation.y += dt * 0.0025;
+  }
+  if (sunnyDust.visible) {
+    const pos = dustGeo.attributes.position;
+    for (let i = 0; i < DUST_COUNT; i++) {
+      const d = dustData[i];
+      pos.array[i * 3] = d.x + Math.sin(t * 0.18 + d.phase) * 0.06;
+      pos.array[i * 3 + 1] = d.y + Math.sin(t * 0.27 + d.phase * 1.7) * 0.09;
+      pos.array[i * 3 + 2] = d.z + Math.cos(t * 0.16 + d.phase) * 0.05;
+    }
+    pos.needsUpdate = true;
   }
 }
 
@@ -6114,44 +7064,40 @@ function animate() {
   requestAnimationFrame(animate);
   const dt = Math.min(clock.getDelta(), 0.05);
   const t = clock.elapsedTime;
-  const now = performance.now();
-  const assemblyT = updateAssembly(now);
 
-  // Gentle reveal: stay close while the shop is being assembled, then ease out
-  // to the full square base. Any user interaction takes control immediately.
-  if (!introDone && !startedInteraction) {
-    const introP = clamp((assemblyT - 6.2) / 3.4, 0, 1);
-    const dist = lerp(fittedDistance * 0.84, fittedDistance, easeInOutCubic(introP));
-    const dir = camera.position.clone().sub(controls.target).normalize();
-    camera.position.copy(controls.target).addScaledVector(dir, dist);
-    if (introP >= 1) introDone = true;
+  if (weatherMix !== weatherTarget) {
+    const p = clamp((performance.now() - weatherTransitionStart) / 1400, 0, 1);
+    weatherMix = lerp(weatherTransitionFrom, weatherTarget, easeInOutCubic(p));
+    if (p >= 1) weatherMix = weatherTarget;
+    applyWeather(weatherMix);
   }
 
-  updateDoors(dt, Math.max(0, assemblyT));
   rainMaterial.uniforms.uTime.value = t;
 
-  // Shadows only need a single static capture once the miniature has finished
-  // assembling. This keeps orbiting buttery even on integrated GPUs.
-  if (!shadowFrozen && assemblyT > 8.7) {
+  // rain splash rings (only meaningful in the wet state)
+  if (splashGroup.visible) {
+    for (let i = 0; i < SPLASHES.length; i++) {
+      const s = SPLASHES[i];
+      const p = ((t + s.phase) % s.period) / s.period;
+      s.mesh.scale.setScalar(0.32 + p * 2.1);
+      s.mat.opacity = (1 - p) * 0.34 * rainMaterial.uniforms.uOpacity.value;
+    }
+  }
+
+  // subtle night shimmer
+  if (weatherMix < 0.985) {
+    bloomPass.strength = (0.5 + Math.sin(t * 1.3) * 0.015) * (1 - weatherMix);
+  }
+
+  updateAtmosphere(t, dt, weatherMix);
+
+  if (!shadowFrozen) {
     shadowFrozen = true;
     renderer.shadowMap.autoUpdate = false;
     renderer.shadowMap.needsUpdate = true;
   }
 
-  // rain splash rings
-  for (let i = 0; i < SPLASHES.length; i++) {
-    const s = SPLASHES[i];
-    const p = ((t + s.phase) % s.period) / s.period;
-    const scale = 0.32 + p * 2.1;
-    s.mesh.scale.setScalar(scale);
-    s.mat.opacity = (1 - p) * 0.34 * rainMaterial.uniforms.uOpacity.value;
-  }
-
-  // subtle neon breathing / wet-light shimmer
-  bloomPass.strength = 0.5 + Math.sin(t * 1.3) * 0.015;
-  const rainP = rainMaterial.uniforms.uOpacity.value;
-  lampShaft.material.opacity = rainP * (0.055 + Math.sin(t * 2.1) * 0.008);
-
+  controls.autoRotate = false;
   controls.update();
   composer.render();
 }
@@ -6171,24 +7117,22 @@ window.addEventListener('resize', () => {
   fitModelToViewport(false);
 });
 
-// Start with everything dark for one frame, then build the little world.
+// The combined weather page is always fully assembled and stable.
 kits.forEach((g) => {
-  g.visible = false;
-  g.position.y = g.userData.assemble.fromY;
-  g.scale.setScalar(g.userData.assemble.scaleFrom);
+  g.visible = true;
+  g.position.y = 0;
+  g.scale.setScalar(1);
 });
+updateWeatherButtons(initialWeather);
+applyWeather(weatherMix);
+renderer.shadowMap.autoUpdate = false;
+renderer.shadowMap.needsUpdate = true;
 window.__diorama = {
   scene, camera, controls, renderer, composer, kits, wetKit, TEX, REFLECT_TEX,
-  setAssemblyTime(seconds) {
-    assemblyStart = performance.now() - seconds * 1000;
-  },
-  freezeAssembly(seconds) {
-    frozenAssemblyTime = seconds;
-  },
-  unfreezeAssembly() {
-    frozenAssemblyTime = null;
-    assemblyStart = performance.now() - 9.0 * 1000;
-  },
+  weatherLights, sunnyDecor, cloudGroup,
+  setWeatherMode,
+  getWeatherMode: () => (weatherTarget > 0.5 ? 'sunny' : 'rain'),
+  getWeatherMix: () => weatherMix,
 };
 animate();
 
