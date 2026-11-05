@@ -1,0 +1,9 @@
+node_modules/
+qa/
+screenshots/
+tools/
+package.json
+package-lock.json
+*.log
+.DS_Store
+Thumbs.db
