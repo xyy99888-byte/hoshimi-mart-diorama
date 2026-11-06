@@ -5801,7 +5801,7 @@ const UMBRELLA_OUT = { x: -1.25, z: 0.02 };
 // long-umbrella references. Every rig in the stand shares this same geometry.
 const UMBRELLA_HUB_Y = 1.05;
 const UMBRELLA_RIM_RADIUS = 0.5;
-const UMBRELLA_RIM_DROP = 0.12;
+const UMBRELLA_RIM_DROP = 0.18;
 const UMBRELLA_RIB_COUNT = 8;
 const UMBRELLA_RIB_LENGTH = Math.hypot(UMBRELLA_RIM_RADIUS, UMBRELLA_RIM_DROP);
 const UMBRELLA_CANOPY_RINGS = 6;
@@ -5809,41 +5809,120 @@ const UMBRELLA_CANOPY_SEGMENTS = 32;
 const UMBRELLA_SLOT_COUNT = 5;
 const UMBRELLA_UP = new THREE.Vector3(0, 1, 0);
 
+// Muted, low-saturation palette inspired by Japanese vinyl umbrellas: slate
+// blue, ink green, warm gray, muted wine and oat. Same material family, only
+// the cloth hue changes slightly so the rack still reads as one set.
+const UMBRELLA_PALETTE = [
+  0x40525f,
+  0x3e5348,
+  0x756f63,
+  0x68464a,
+  0xb4ada0,
+];
+
+const umbrellaFabricMap = canvasTexture(256, 256, (ctx, w, h) => {
+  ctx.fillStyle = '#e8e5dd';
+  ctx.fillRect(0, 0, w, h);
+  ctx.strokeStyle = 'rgba(118,116,106,0.10)';
+  ctx.lineWidth = 1;
+  for (let x = 0; x < w; x += 4) {
+    ctx.beginPath();
+    ctx.moveTo(x + 0.5, 0);
+    ctx.lineTo(x + 0.5, h);
+    ctx.stroke();
+  }
+  for (let y = 0; y < h; y += 5) {
+    ctx.beginPath();
+    ctx.moveTo(0, y + 0.5);
+    ctx.lineTo(w, y + 0.5);
+    ctx.stroke();
+  }
+  for (let i = 0; i < 1400; i++) {
+    const shade = 120 + Math.floor(Math.random() * 80);
+    ctx.fillStyle = `rgba(${shade},${shade},${shade - 6},0.07)`;
+    ctx.fillRect(Math.random() * w, Math.random() * h, 1.2, 1.2);
+  }
+}, { repeat: [2, 2] });
+
+function addUmbrellaSheen(material) {
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.uSheen = { value: 0 };
+    shader.fragmentShader = 'uniform float uSheen;\n' + shader.fragmentShader.replace(
+      '#include <dithering_fragment>',
+      `#include <dithering_fragment>
+      float umbrellaFresnel = pow(1.0 - clamp(abs(dot(normalize(vNormal), normalize(vViewPosition))), 0.0, 1.0), 3.0);
+      gl_FragColor.rgb += vec3(0.42, 0.50, 0.54) * umbrellaFresnel * uSheen;`
+    );
+    material.userData.sheenUniform = shader.uniforms.uSheen;
+  };
+  return material;
+}
+
+function makeUmbrellaCanopyMaterial(index) {
+  const color = new THREE.Color(UMBRELLA_PALETTE[index % UMBRELLA_PALETTE.length]);
+  const material = new THREE.MeshToonMaterial({
+    color,
+    gradientMap: TOON_RAMP,
+    vertexColors: true,
+    side: THREE.DoubleSide,
+    skinning: true,
+    map: umbrellaFabricMap,
+  });
+  return addUmbrellaSheen(material);
+}
+
+function makeUmbrellaWrapMaterial(index) {
+  const color = new THREE.Color(UMBRELLA_PALETTE[index % UMBRELLA_PALETTE.length]).multiplyScalar(0.82);
+  const material = new THREE.MeshToonMaterial({
+    color,
+    gradientMap: TOON_RAMP,
+    side: THREE.DoubleSide,
+    map: umbrellaFabricMap,
+  });
+  return addUmbrellaSheen(material);
+}
+
 // Shared geometry/materials: five umbrellas have the exact same canopy
 // diameter, rim shape, rib count and appearance.
 const umbrellaHandleCurve = new THREE.CatmullRomCurve3([
-  new THREE.Vector3(0, 0.09, 0),
-  new THREE.Vector3(0, 0.035, 0),
-  new THREE.Vector3(0.02, 0.018, 0.055),
-  new THREE.Vector3(0.085, 0.06, 0.12),
-  new THREE.Vector3(0.135, 0.12, 0.145),
+  new THREE.Vector3(0, 0.14, 0),
+  new THREE.Vector3(0, 0.055, 0),
+  new THREE.Vector3(0.025, 0.022, 0.075),
+  new THREE.Vector3(0.11, 0.045, 0.185),
+  new THREE.Vector3(0.18, 0.13, 0.225),
 ]);
-const umbrellaHandleGeometry = new THREE.TubeGeometry(umbrellaHandleCurve, 16, 0.014, 7, false);
-const umbrellaRibGeometry = new THREE.CylinderGeometry(0.004, 0.0065, UMBRELLA_RIB_LENGTH, 5);
-const umbrellaRibTipGeometry = new THREE.SphereGeometry(0.01, 6, 5);
-const umbrellaHubGeometry = new THREE.SphereGeometry(0.032, 9, 7);
-const umbrellaTipGeometry = new THREE.ConeGeometry(0.019, 0.11, 7);
-const umbrellaRunnerGeometry = new THREE.TorusGeometry(0.026, 0.007, 6, 12);
-const umbrellaStrapGeometry = new THREE.TorusGeometry(0.047, 0.0065, 5, 14);
-const umbrellaBuckleGeometry = new THREE.BoxGeometry(0.024, 0.032, 0.017);
+const umbrellaHandleGeometry = new THREE.TubeGeometry(umbrellaHandleCurve, 20, 0.016, 8, false);
+const umbrellaRibGeometry = new THREE.CylinderGeometry(0.0032, 0.005, UMBRELLA_RIB_LENGTH, 5);
+const umbrellaRibTipGeometry = new THREE.SphereGeometry(0.008, 6, 5);
+const umbrellaHubGeometry = new THREE.SphereGeometry(0.03, 9, 7);
+const umbrellaTipGeometry = new THREE.ConeGeometry(0.017, 0.1, 8);
+const umbrellaRunnerGeometry = new THREE.TorusGeometry(0.026, 0.0055, 6, 12);
+const umbrellaStrapGeometry = new THREE.TorusGeometry(0.047, 0.006, 5, 14);
+const umbrellaBuckleGeometry = new THREE.BoxGeometry(0.022, 0.03, 0.016);
 const umbrellaStrapMaterial = toon(0xcbbf9d, { side: THREE.DoubleSide });
 const umbrellaBuckleMaterial = basic(0x6f5c45);
+const umbrellaRibMaterial = toon(0x8d897d, { soft: true });
+const umbrellaGripGeometry = new THREE.CylinderGeometry(0.019, 0.021, 0.22, 10);
+const umbrellaGripCapGeometry = new THREE.SphereGeometry(0.021, 9, 7);
+const umbrellaGripMaterial = toon(0x4b382b, { soft: true });
 
 // A neat wrapped-fabric sleeve hides the folded skin while the umbrella is
 // closed, so every closed umbrella reads as a slim body with a tied strap.
 const umbrellaWrapPositions = [];
+const umbrellaWrapUvs = [];
 const umbrellaWrapIndices = [];
 {
   const rings = 6;
   const segments = 16;
   for (let ring = 0; ring <= rings; ring++) {
     const t = ring / rings;
-    const y = lerp(0.56, UMBRELLA_HUB_Y - 0.02, t);
+    const y = lerp(0.46, UMBRELLA_HUB_Y - 0.02, t);
     for (let s = 0; s < segments; s++) {
       const angle = (s / segments) * TAU;
       const fold = 1 + 0.11 * Math.cos(8 * angle);
-      const radius = lerp(0.02, 0.052, t) * fold;
+      const radius = lerp(0.018, 0.052, t) * fold;
       umbrellaWrapPositions.push(Math.cos(angle) * radius, y, Math.sin(angle) * radius);
+      umbrellaWrapUvs.push(s / segments, t);
     }
   }
   for (let ring = 0; ring < rings; ring++) {
@@ -5858,9 +5937,11 @@ const umbrellaWrapIndices = [];
   // Close both ends so the tapered sleeve reads as wrapped cloth rather than
   // an open tube when seen from above.
   const bottomCenter = umbrellaWrapPositions.length / 3;
-  umbrellaWrapPositions.push(0, 0.56, 0);
+  umbrellaWrapPositions.push(0, 0.46, 0);
+  umbrellaWrapUvs.push(0.5, 0);
   const topCenter = umbrellaWrapPositions.length / 3;
   umbrellaWrapPositions.push(0, UMBRELLA_HUB_Y - 0.02, 0);
+  umbrellaWrapUvs.push(0.5, 1);
   const topStart = rings * segments;
   for (let s = 0; s < segments; s++) {
     const next = (s + 1) % segments;
@@ -5870,13 +5951,9 @@ const umbrellaWrapIndices = [];
 }
 const umbrellaWrapGeometry = new THREE.BufferGeometry();
 umbrellaWrapGeometry.setAttribute('position', new THREE.Float32BufferAttribute(umbrellaWrapPositions, 3));
+umbrellaWrapGeometry.setAttribute('uv', new THREE.Float32BufferAttribute(umbrellaWrapUvs, 2));
 umbrellaWrapGeometry.setIndex(umbrellaWrapIndices);
 umbrellaWrapGeometry.computeVertexNormals();
-const umbrellaWrapMaterial = new THREE.MeshToonMaterial({
-  color: 0x2d4942,
-  gradientMap: TOON_RAMP,
-  side: THREE.DoubleSide,
-});
 
 const umbrellaCanopyPositions = [];
 const umbrellaCanopyColors = [];
@@ -5885,17 +5962,18 @@ const umbrellaCanopySkinIndices = [];
 const umbrellaCanopySkinWeights = [];
 const umbrellaCanopyIndices = [];
 {
-  const dark = new THREE.Color(0x2d4942);
-  const rim = new THREE.Color(0xd9cfb4);
+  const core = new THREE.Color(0.86, 0.86, 0.83);
+  const cloth = new THREE.Color(0.99, 0.99, 0.96);
+  const rim = new THREE.Color(1.24, 1.18, 1.04);
   umbrellaCanopyPositions.push(0, UMBRELLA_HUB_Y, 0);
-  umbrellaCanopyColors.push(dark.r, dark.g, dark.b);
+  umbrellaCanopyColors.push(core.r, core.g, core.b);
   umbrellaCanopyUvs.push(0.5, 0.5);
   umbrellaCanopySkinIndices.push(UMBRELLA_RIB_COUNT, 0, 0, 0);
   umbrellaCanopySkinWeights.push(1, 0, 0, 0);
   for (let ring = 1; ring <= UMBRELLA_CANOPY_RINGS; ring++) {
     const t = ring / UMBRELLA_CANOPY_RINGS;
     const radius = UMBRELLA_RIM_RADIUS * t;
-    const y = UMBRELLA_HUB_Y - UMBRELLA_RIM_DROP * Math.pow(t, 1.35);
+    const y = UMBRELLA_HUB_Y - UMBRELLA_RIM_DROP * Math.pow(t, 1.7);
     for (let s = 0; s < UMBRELLA_CANOPY_SEGMENTS; s++) {
       const angle = (s / UMBRELLA_CANOPY_SEGMENTS) * TAU;
       const sector = angle / (TAU / UMBRELLA_RIB_COUNT);
@@ -5905,7 +5983,7 @@ const umbrellaCanopyIndices = [];
       const w0 = frac < 1e-5 ? 1 : 1 - frac;
       const w1 = frac < 1e-5 ? 0 : frac;
       umbrellaCanopyPositions.push(Math.cos(angle) * radius, y, Math.sin(angle) * radius);
-      const color = ring === UMBRELLA_CANOPY_RINGS ? rim : dark;
+      const color = ring === UMBRELLA_CANOPY_RINGS ? rim : cloth;
       umbrellaCanopyColors.push(color.r, color.g, color.b);
       umbrellaCanopyUvs.push(s / UMBRELLA_CANOPY_SEGMENTS, t);
       umbrellaCanopySkinIndices.push(base, next, 0, 0);
@@ -5935,27 +6013,19 @@ umbrellaCanopyGeometry.setAttribute('skinIndex', new THREE.Uint16BufferAttribute
 umbrellaCanopyGeometry.setAttribute('skinWeight', new THREE.Float32BufferAttribute(umbrellaCanopySkinWeights, 4));
 umbrellaCanopyGeometry.setIndex(umbrellaCanopyIndices);
 umbrellaCanopyGeometry.computeVertexNormals();
-const umbrellaCanopyMaterial = new THREE.MeshToonMaterial({
-  color: 0xffffff,
-  gradientMap: TOON_RAMP,
-  vertexColors: true,
-  side: THREE.DoubleSide,
-  skinning: true,
-});
-
 const umbrellaSeamPositions = [];
 const umbrellaSeamSkinIndices = [];
 const umbrellaSeamSkinWeights = [];
 const umbrellaSeamIndices = [];
 for (let i = 0; i < UMBRELLA_RIB_COUNT; i++) {
   const angle = (i / UMBRELLA_RIB_COUNT) * TAU;
-  const tangentX = -Math.sin(angle) * 0.008;
-  const tangentZ = Math.cos(angle) * 0.008;
+  const tangentX = -Math.sin(angle) * 0.006;
+  const tangentZ = Math.cos(angle) * 0.006;
   const startVertex = umbrellaSeamPositions.length / 3;
   for (let ring = 0; ring <= UMBRELLA_CANOPY_RINGS; ring++) {
     const t = Math.max(0.035, ring / UMBRELLA_CANOPY_RINGS);
     const radius = UMBRELLA_RIM_RADIUS * t;
-    const y = UMBRELLA_HUB_Y - UMBRELLA_RIM_DROP * Math.pow(t, 1.35) + 0.004;
+    const y = UMBRELLA_HUB_Y - UMBRELLA_RIM_DROP * Math.pow(t, 1.7) + 0.004;
     const x = Math.cos(angle) * radius;
     const z = Math.sin(angle) * radius;
     umbrellaSeamPositions.push(x - tangentX, y, z - tangentZ, x + tangentX, y, z + tangentZ);
@@ -5975,7 +6045,7 @@ umbrellaSeamGeometry.setAttribute('skinWeight', new THREE.Float32BufferAttribute
 umbrellaSeamGeometry.setIndex(umbrellaSeamIndices);
 umbrellaSeamGeometry.computeVertexNormals();
 const umbrellaSeamMaterial = new THREE.MeshToonMaterial({
-  color: 0x263d38,
+  color: 0x555b52,
   gradientMap: TOON_RAMP,
   side: THREE.DoubleSide,
   skinning: true,
@@ -6035,9 +6105,9 @@ for (let i = 0; i < UMBRELLA_SLOT_COUNT; i++) {
   umbrellaSlots.push({
     x: UMBRELLA_STAND.x + Math.cos(angle) * 0.105,
     z: UMBRELLA_STAND.z + Math.sin(angle) * 0.105,
-    tiltX: Math.sin(angle) * 0.085,
-    tiltZ: -Math.cos(angle) * 0.085,
-    rotY: -angle,
+    tiltX: 0,
+    tiltZ: 0,
+    rotY: angle,
   });
 }
 
@@ -6046,13 +6116,27 @@ function createUmbrellaRig(index, slot) {
   group.position.set(slot.x, SIDEWALK_TOP, slot.z);
   group.rotation.set(slot.tiltX, slot.rotY, slot.tiltZ);
   world.add(group);
+  const canopyMaterial = makeUmbrellaCanopyMaterial(index);
+  const wrapMaterial = makeUmbrellaWrapMaterial(index);
 
   cylinder(group, M.metalDark, 0.012, 0.012, 0.99, 0, 0.585, 0, {
     seg: 8, cast: false, receive: false,
   });
-  const handle = new THREE.Mesh(umbrellaHandleGeometry, M.metalDark);
+  const handle = new THREE.Mesh(umbrellaHandleGeometry, umbrellaGripMaterial);
   handle.castShadow = false;
   group.add(handle);
+  const grip = new THREE.Mesh(umbrellaGripGeometry, umbrellaGripMaterial);
+  grip.position.y = 0.27;
+  grip.castShadow = false;
+  group.add(grip);
+  const gripBottom = new THREE.Mesh(umbrellaGripCapGeometry, umbrellaGripMaterial);
+  gripBottom.position.y = 0.16;
+  gripBottom.castShadow = false;
+  group.add(gripBottom);
+  const gripTop = new THREE.Mesh(umbrellaGripCapGeometry, umbrellaGripMaterial);
+  gripTop.position.y = 0.38;
+  gripTop.castShadow = false;
+  group.add(gripTop);
   const hubCap = new THREE.Mesh(umbrellaHubGeometry, M.metalDark);
   hubCap.scale.set(1, 0.65, 1);
   hubCap.position.y = UMBRELLA_HUB_Y;
@@ -6067,7 +6151,7 @@ function createUmbrellaRig(index, slot) {
   runner.position.y = 0.72;
   runner.castShadow = false;
   group.add(runner);
-  const wrap = new THREE.Mesh(umbrellaWrapGeometry, umbrellaWrapMaterial);
+  const wrap = new THREE.Mesh(umbrellaWrapGeometry, wrapMaterial);
   wrap.castShadow = false;
   group.add(wrap);
 
@@ -6094,7 +6178,7 @@ function createUmbrellaRig(index, slot) {
     bone.position.set(0, UMBRELLA_HUB_Y, 0);
     bone.quaternion.setFromUnitVectors(UMBRELLA_UP, openDir);
     group.add(bone);
-    const ribMesh = new THREE.Mesh(umbrellaRibGeometry, M.metalDark);
+    const ribMesh = new THREE.Mesh(umbrellaRibGeometry, umbrellaRibMaterial);
     ribMesh.position.y = UMBRELLA_RIB_LENGTH * 0.5;
     ribMesh.castShadow = false;
     bone.add(ribMesh);
@@ -6106,7 +6190,7 @@ function createUmbrellaRig(index, slot) {
     ribBones.push({ bone, openDir, closedDir });
   }
 
-  const canopyMesh = new THREE.SkinnedMesh(umbrellaCanopyGeometry, umbrellaCanopyMaterial);
+  const canopyMesh = new THREE.SkinnedMesh(umbrellaCanopyGeometry, canopyMaterial);
   canopyMesh.castShadow = false;
   canopyMesh.receiveShadow = false;
   canopyMesh.frustumCulled = false;
@@ -6140,11 +6224,13 @@ function createUmbrellaRig(index, slot) {
     ribBones,
     ribVisuals,
     canopyMesh,
+    canopyMaterial,
     seamMesh,
     skeleton,
     runner,
     tipCap,
     wrap,
+    wrapMaterial,
     strap,
     bodyHit: null,
   };
@@ -6185,6 +6271,80 @@ function setUmbrellaBonePose(value) {
 }
 
 addHitBox(0.45, 1.15, 0.45, UMBRELLA_STAND.x, 0.82, UMBRELLA_STAND.z, world, { type: 'umbrellaStand' });
+
+// Metal top ring, five rubber-lined collars and radial arms hold every shaft
+// upright at exactly the same height.
+const umbrellaStandMetal = toon(0x9a9d96, { soft: true });
+const umbrellaStandDark = toon(0x4d504b, { soft: true });
+const umbrellaStandRing = new THREE.Mesh(
+  new THREE.TorusGeometry(0.205, 0.006, 6, 36),
+  umbrellaStandMetal
+);
+umbrellaStandRing.rotation.x = Math.PI / 2;
+umbrellaStandRing.position.set(UMBRELLA_STAND.x, 0.585, UMBRELLA_STAND.z);
+umbrellaStandRing.castShadow = false;
+world.add(umbrellaStandRing);
+for (let i = 0; i < UMBRELLA_SLOT_COUNT; i++) {
+  const angle = (i / UMBRELLA_SLOT_COUNT) * TAU + 0.2;
+  const sx = UMBRELLA_STAND.x + Math.cos(angle) * 0.105;
+  const sz = UMBRELLA_STAND.z + Math.sin(angle) * 0.105;
+  const collar = new THREE.Mesh(
+    new THREE.TorusGeometry(0.027, 0.0045, 5, 12),
+    umbrellaStandDark
+  );
+  collar.rotation.x = Math.PI / 2;
+  collar.position.set(sx, 0.56, sz);
+  collar.castShadow = false;
+  world.add(collar);
+  const arm = barBetween(
+    world,
+    umbrellaStandMetal,
+    [sx, 0.58, sz],
+    [UMBRELLA_STAND.x + Math.cos(angle) * 0.205, 0.58, UMBRELLA_STAND.z + Math.sin(angle) * 0.205],
+    0.0045
+  );
+  arm.castShadow = false;
+}
+
+// Soft open-canopy shadow with faint rib spokes. The scene uses a frozen
+// shadow map, so this keeps the carried umbrella grounded without rebuilding
+// the whole shadow atlas each frame.
+const umbrellaShadowMap = canvasTexture(256, 256, (ctx, w, h) => {
+  ctx.clearRect(0, 0, w, h);
+  const cx = w * 0.5;
+  const cy = h * 0.5;
+  const gradient = ctx.createRadialGradient(cx, cy, 8, cx, cy, w * 0.47);
+  gradient.addColorStop(0, 'rgba(0,0,0,0.34)');
+  gradient.addColorStop(0.55, 'rgba(0,0,0,0.20)');
+  gradient.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = gradient;
+  ctx.beginPath();
+  ctx.arc(cx, cy, w * 0.47, 0, TAU);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(0,0,0,0.22)';
+  ctx.lineWidth = 2;
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * TAU;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + Math.cos(a) * w * 0.42, cy + Math.sin(a) * w * 0.42);
+    ctx.stroke();
+  }
+});
+const umbrellaShadowMaterial = new THREE.MeshBasicMaterial({
+  map: umbrellaShadowMap,
+  color: 0x1c2825,
+  transparent: true,
+  opacity: 0,
+  depthWrite: false,
+  side: THREE.DoubleSide,
+});
+const umbrellaShadow = new THREE.Mesh(new THREE.PlaneGeometry(1.28, 1.28), umbrellaShadowMaterial);
+umbrellaShadow.rotation.x = -Math.PI / 2;
+umbrellaShadow.position.set(UMBRELLA_STAND.x, 0.174, UMBRELLA_STAND.z);
+umbrellaShadow.renderOrder = 5;
+umbrellaShadow.visible = false;
+world.add(umbrellaShadow);
 
 function takeUmbrellaOut() {
   if (!umbrellaState.inStand) return;
@@ -7275,6 +7435,26 @@ function updateInteractions(dt, t) {
   umbrellaCanopyMesh.visible = true;
   umbrellaTipCap.visible = true;
 
+  const umbrellaWet = 1 - weatherMix;
+  const umbrellaSheen = 0.008 + umbrellaWet * 0.072;
+  umbrellaRigs.forEach((rig) => {
+    const canopyUniform = rig.canopyMaterial && rig.canopyMaterial.userData.sheenUniform;
+    if (canopyUniform) canopyUniform.value = umbrellaSheen;
+    const wrapUniform = rig.wrapMaterial && rig.wrapMaterial.userData.sheenUniform;
+    if (wrapUniform) wrapUniform.value = umbrellaSheen * 0.7;
+  });
+
+  if (!umbrellaState.inStand && umbrellaState.open > 0.04) {
+    umbrellaShadow.visible = true;
+    umbrellaShadow.position.set(umbrellaGroup.position.x, 0.174, umbrellaGroup.position.z);
+    const shadowScale = 0.7 + umbrellaState.open * 0.52;
+    umbrellaShadow.scale.set(shadowScale, shadowScale, 1);
+    umbrellaShadowMaterial.opacity = (0.05 + weatherMix * 0.17) *
+      clamp(umbrellaState.open * 1.35, 0, 1);
+  } else {
+    umbrellaShadow.visible = false;
+  }
+
   // door: click opens, click again closes. Camera movement never triggers it.
   doorState.open += (doorState.target - doorState.open) * Math.min(1, dt * 2.2);
   const doorOpen = clamp(doorState.open, 0, 1);
@@ -7616,6 +7796,8 @@ const interactionDebug = {
   umbrellaSlots,
   getActiveUmbrella: () => activeUmbrellaRig,
   setUmbrellaPoseForRig: (rig, value) => setUmbrellaBonePoseForRig(rig, value),
+  umbrellaShadow,
+  umbrellaShadowMaterial,
   neonFlash,
   neonFlashMaterial: neonFlashMat,
   balloonClusterState,
