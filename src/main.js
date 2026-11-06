@@ -438,6 +438,17 @@ const OUTLINE_MAT = new THREE.MeshBasicMaterial({
   fog: false,
 });
 
+// Invisible raycast pads live on layer 1, so the camera never draws them.
+const INVISIBLE_HIT_MAT = new THREE.MeshBasicMaterial({
+  transparent: true,
+  opacity: 0,
+  depthWrite: false,
+  colorWrite: false,
+  side: THREE.DoubleSide,
+  fog: false,
+});
+const HIT_LAYER = 1;
+
 function addOutline(mesh, k = 0.014) {
   const hull = new THREE.Mesh(mesh.geometry, OUTLINE_MAT);
   hull.scale.setScalar(1 + k);
@@ -2084,7 +2095,10 @@ const DOOR = { left: null, right: null, open: 0, target: 0 };
   DOOR.left = makeDoorPanel(-0.12, 0.7, 0.13);
   DOOR.right = makeDoorPanel(0.58, 0.7, 0.35);
   [DOOR.left, DOOR.right].forEach((g) => {
-    g.traverse((o) => { o.userData.noMerge = true; });
+    g.traverse((o) => {
+      o.userData.noMerge = true;
+      if (o.isMesh) o.castShadow = false;
+    });
   });
   // automatic door sensor
   box(frontKit, M.metalDark, 0.32, 0.1, 0.13, 0.23, 2.62, -0.8, { outline: 0.006 });
@@ -3259,8 +3273,25 @@ const bikeKit = kit('31-自行车', 3.48, { fromY: -0.7, scaleFrom: 0.9, duratio
   barBetween(bikeKit, M.metalDark, [bx - 0.06, wheelY - 0.06, (rearZ + frontZ) / 2], [bx - 0.22, SIDEWALK_TOP + 0.01, (rearZ + frontZ) / 2 + 0.12], 0.012);
   // reflector and bell
   box(bikeKit, basic(0xd34d42), 0.05, 0.04, 0.02, bx, SIDEWALK_TOP + 0.52, rearZ - 0.24, { cast: false });
-  sphere(bikeKit, M.metalLight, 0.04, bx + 0.18, SIDEWALK_TOP + 1.09, frontZ - 0.12, { seg: 10, cast: false });
+  const bikeBell = new THREE.Group();
+  bikeBell.position.set(bx + 0.18, SIDEWALK_TOP + 1.09, frontZ - 0.12);
+  const bellDome = new THREE.Mesh(new THREE.SphereGeometry(0.04, 10, 8, 0, TAU, 0, Math.PI / 2), M.metalLight);
+  bellDome.castShadow = false;
+  bikeBell.add(bellDome);
+  const bellRim = new THREE.Mesh(new THREE.TorusGeometry(0.039, 0.006, 5, 12), M.metalDark);
+  bellRim.rotation.x = Math.PI / 2;
+  bellRim.castShadow = false;
+  bikeBell.add(bellRim);
+  const bellLever = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.012, 0.012), M.metalDark);
+  bellLever.position.set(0.035, -0.01, 0);
+  bikeBell.add(bellLever);
+  bikeBell.traverse((o) => { o.userData.noMerge = true; });
+  bikeKit.add(bikeBell);
+  bikeKit.userData.bell = bikeBell;
   contactShadow(bikeKit, bx, (rearZ + frontZ) / 2, 0.7, 1.25, 0.34, SIDEWALK_TOP + 0.007);
+  // The bicycle can be nudged around; the soft contact shadow travels with it,
+  // while its long directional shadow is left out of the frozen shadow map.
+  bikeKit.traverse((o) => { if (o.isMesh) o.castShadow = false; });
 }
 
 // ------------------------------------------------------------
@@ -3881,8 +3912,19 @@ function addFlower(parent, x, y, z, colorIndex = 0, scale = 1) {
   sphere(parent, basic(0xffe08a), 0.027 * scale, x, y + 0.25 * scale, z, { seg: 6, cast: false });
 }
 
+const interactiveTrees = [];
+
 function addTree(parent, x, z, scale = 1, planterSize = 0.74) {
   const base = SIDEWALK_TOP;
+  const treeRecord = {
+    x, z, scale, base,
+    canopyY: base + 2.25 * scale,
+    leaves: [],
+    swing: 0,
+    glow: null,
+    glowBase: 1.4 * scale,
+  };
+  interactiveTrees.push(treeRecord);
   box(parent, M.concrete, planterSize, 0.3, planterSize, x, base + 0.15, z, { outline: 0.012 });
   box(parent, toon(0x8b6446), planterSize - 0.08, 0.055, planterSize - 0.08, x, base + 0.32, z, { cast: false });
   box(parent, toon(0x4b3528), planterSize - 0.14, 0.02, planterSize - 0.14, x, base + 0.355, z, { cast: false });
@@ -3908,7 +3950,18 @@ function addTree(parent, x, z, scale = 1, planterSize = 0.74) {
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     addOutline(mesh, 0.018);
+    // Keep the crown out of the batching pass so it can sway independently.
+    mesh.traverse((o) => {
+      if (o.isMesh) o.userData.noMerge = true;
+    });
     parent.add(mesh);
+    treeRecord.leaves.push({
+      mesh,
+      baseX: mesh.rotation.x,
+      baseZ: mesh.rotation.z,
+      phase: Math.random() * TAU,
+      speed: rand(0.8, 1.35),
+    });
   });
   // a few soft blossoms / berries
   for (let i = 0; i < 7; i++) {
@@ -3962,27 +4015,75 @@ sunnyDecor.name = 'sunny-day-decor';
 world.add(sunnyDecor);
 
 // Balloons tied to the bicycle basket.
+const balloonHome = new THREE.Vector3(2.55, SIDEWALK_TOP + 0.82, -0.35);
 const balloonPivot = new THREE.Group();
-balloonPivot.position.set(2.55, SIDEWALK_TOP + 0.82, -0.35);
+balloonPivot.position.copy(balloonHome);
 sunnyDecor.add(balloonPivot);
+const balloonRecords = [];
+const balloonStringGeo = new THREE.CylinderGeometry(0.006, 0.006, 1, 5);
+
+function updateBalloonString(record) {
+  const start = new THREE.Vector3(0, 0.03, 0);
+  const end = new THREE.Vector3(
+    record.group.position.x,
+    record.group.position.y - 0.2,
+    record.group.position.z + 0.01
+  );
+  const dir = end.clone().sub(start);
+  const len = Math.max(0.001, dir.length());
+  record.string.position.copy(start).addScaledVector(dir, 0.5);
+  record.string.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().normalize());
+  record.string.scale.set(1, len, 1);
+}
+
 {
   const balloonColors = [0xff7e8b, 0xffd152, 0x67c8ee];
   balloonColors.forEach((color, i) => {
     const bx = -0.22 + i * 0.2;
     const by = 0.92 + (i === 1 ? 0.2 : 0);
-    barBetween(balloonPivot, M.metalDark, [0, 0.03, 0], [bx, by - 0.2, 0.01], 0.007);
+    const bg = new THREE.Group();
+    bg.position.set(bx, by, 0.01);
+    balloonPivot.add(bg);
+
     const balloon = new THREE.Mesh(new THREE.SphereGeometry(0.14, 12, 10), toon(color, { soft: true }));
-    balloon.position.set(bx, by, 0.01);
     balloon.scale.set(1, 1.22, 1);
-    balloon.castShadow = true;
-    balloonPivot.add(balloon);
+    balloon.castShadow = false;
+    bg.add(balloon);
     const knot = new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.08, 8), toon(color));
-    knot.position.set(bx, by - 0.19, 0.01);
+    knot.position.set(0, -0.19, 0);
     knot.rotation.z = Math.PI;
-    balloonPivot.add(knot);
+    knot.castShadow = false;
+    bg.add(knot);
     const shine = new THREE.Mesh(new THREE.SphereGeometry(0.028, 8, 6), basic(0xffffff));
-    shine.position.set(bx - 0.05, by + 0.07, 0.105);
-    balloonPivot.add(shine);
+    shine.position.set(-0.05, 0.07, 0.105);
+    shine.castShadow = false;
+    bg.add(shine);
+
+    const string = new THREE.Mesh(balloonStringGeo, M.metalDark);
+    string.castShadow = false;
+    string.receiveShadow = false;
+    balloonPivot.add(string);
+
+    const record = {
+      group: bg,
+      base: new THREE.Vector3(bx, by, 0.01),
+      string,
+      offset: new THREE.Vector3(),
+      velocity: new THREE.Vector3(),
+      bob: 0,
+      bobT: 0,
+      dragActive: false,
+      returning: false,
+      hit: null,
+      phase: Math.random() * TAU,
+    };
+    const hit = new THREE.Mesh(new THREE.SphereGeometry(0.21, 10, 8), INVISIBLE_HIT_MAT);
+    hit.layers.set(HIT_LAYER);
+    hit.userData.interaction = { type: 'balloon', record };
+    bg.add(hit);
+    record.hit = hit;
+    balloonRecords.push(record);
+    updateBalloonString(record);
   });
 }
 
@@ -4083,15 +4184,16 @@ TEX.sunnySticker = canvasTexture(256, 256, (ctx, w, h) => {
   ctx.fillText('SUNNY DAY', w / 2, 215);
 });
 
-// Poster over the side-wall notice board and left lobby board.
-const sunnyBoardPoster = texturedPlane(sunnyDecor, TEX.sunnyPoster, 0.47, 0.62, STORE_X1 + 0.042, 2.36, -2.34, {
+// Poster over the side-wall notice board and left lobby board. These stay
+// outside the sunny-only group so they can be admired in either weather.
+const sunnyBoardPoster = texturedPlane(world, TEX.sunnyPoster, 0.47, 0.62, STORE_X1 + 0.042, 2.36, -2.34, {
   ry: Math.PI / 2,
   transparent: false,
 });
-sunnyBoardPoster.userData.sunnyOnly = true;
-texturedPlane(sunnyDecor, TEX.sunnyPoster, 0.46, 0.6, STORE_X0 - 0.045, 1.7, -2.48, {
+const sunnyLeftPoster = texturedPlane(world, TEX.sunnyPoster, 0.46, 0.6, STORE_X0 - 0.045, 1.7, -2.48, {
   ry: -Math.PI / 2,
 });
+const posterPlanes = [sunnyBoardPoster, sunnyLeftPoster];
 // small stickers on the glass
 texturedPlane(sunnyDecor, TEX.sunnySticker, 0.34, 0.34, -3.58, 1.04, -0.915, { transparent: true });
 texturedPlane(sunnyDecor, TEX.sunnySticker, 0.27, 0.27, 0.72, 1.02, -0.915, { transparent: true });
@@ -4885,6 +4987,902 @@ window.addEventListener('keydown', (e) => {
 });
 
 // ------------------------------------------------------------
+// Gentle miniature interactions (raycast, no pop-up UI)
+// ------------------------------------------------------------
+const interactionHitMeshes = [];
+const interactionRaycaster = new THREE.Raycaster();
+interactionRaycaster.layers.enableAll();
+const interactionPointer = new THREE.Vector2();
+const interactionPlane = new THREE.Plane();
+const interactionPoint = new THREE.Vector3();
+
+let audioCtx = null;
+function ensureAudio() {
+  if (!audioCtx) {
+    const AudioCtor = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtor) return null;
+    try {
+      audioCtx = new AudioCtor();
+    } catch (e) {
+      return null;
+    }
+  }
+  if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+  return audioCtx;
+}
+
+function playTone(freq, delay, duration, volume, type = 'sine') {
+  const ctx = ensureAudio();
+  if (!ctx) return;
+  const t0 = ctx.currentTime + delay;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = type;
+  osc.frequency.setValueAtTime(freq, t0);
+  gain.gain.setValueAtTime(0.0001, t0);
+  gain.gain.linearRampToValueAtTime(volume, t0 + 0.012);
+  gain.gain.exponentialRampToValueAtTime(0.0001, t0 + duration);
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  osc.start(t0);
+  osc.stop(t0 + duration + 0.06);
+}
+
+function playVendingChime() {
+  // A tiny, warm two-note "ding-dong" for the vending machine.
+  playTone(1046.5, 0.0, 0.32, 0.045, 'sine');
+  playTone(1318.5, 0.12, 0.46, 0.034, 'sine');
+  playTone(1568.0, 0.24, 0.52, 0.021, 'sine');
+}
+
+function playBikeBell() {
+  // High, lightly beating partials read as a small bicycle bell.
+  playTone(2349.3, 0.0, 0.42, 0.033, 'sine');
+  playTone(3136.0, 0.0, 0.3, 0.017, 'sine');
+  playTone(2637.0, 0.095, 0.45, 0.024, 'sine');
+  playTone(3520.0, 0.095, 0.34, 0.012, 'sine');
+}
+
+function isVisibleInScene(object) {
+  let current = object;
+  while (current) {
+    if (!current.visible) return false;
+    current = current.parent;
+  }
+  return true;
+}
+
+function addHitMesh(geometry, parent, x, y, z, data) {
+  const mesh = new THREE.Mesh(geometry, INVISIBLE_HIT_MAT);
+  mesh.position.set(x, y, z);
+  mesh.layers.set(HIT_LAYER);
+  mesh.castShadow = false;
+  mesh.receiveShadow = false;
+  mesh.renderOrder = -100;
+  mesh.userData.interaction = data;
+  parent.add(mesh);
+  interactionHitMeshes.push(mesh);
+  return mesh;
+}
+
+function addHitBox(w, h, d, x, y, z, parent, data) {
+  return addHitMesh(new THREE.BoxGeometry(w, h, d), parent, x, y, z, data);
+}
+
+function addHitSphere(r, x, y, z, parent, data) {
+  return addHitMesh(new THREE.SphereGeometry(r, 12, 8), parent, x, y, z, data);
+}
+
+function addHitPlane(w, h, x, y, z, parent, data, ry = 0) {
+  const mesh = addHitMesh(new THREE.PlaneGeometry(w, h), parent, x, y, z, data);
+  mesh.rotation.y = ry;
+  return mesh;
+}
+
+function findInteractionHit(event) {
+  const rect = renderer.domElement.getBoundingClientRect();
+  interactionPointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+  interactionPointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+  interactionRaycaster.setFromCamera(interactionPointer, camera);
+  const hits = interactionRaycaster.intersectObjects(interactionHitMeshes, false);
+  for (let i = 0; i < hits.length; i++) {
+    const hit = hits[i];
+    const data = hit.object.userData.interaction;
+    if (data && isVisibleInScene(hit.object)) {
+      return { object: hit.object, data, point: hit.point, distance: hit.distance };
+    }
+  }
+  return null;
+}
+
+function pointerOnHorizontalPlane(event, y) {
+  const rect = renderer.domElement.getBoundingClientRect();
+  interactionPointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+  interactionPointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+  interactionRaycaster.setFromCamera(interactionPointer, camera);
+  interactionPlane.setFromNormalAndCoplanarPoint(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, y, 0));
+  const point = new THREE.Vector3();
+  return interactionRaycaster.ray.intersectPlane(interactionPlane, point) ? point : null;
+}
+
+// ------------------------------------------------------------
+// Vending machines: lightbox, chime and floating drinks
+// ------------------------------------------------------------
+const vendingInteract = [];
+const VENDING_Z = [-3.72, -2.62];
+const BOTTLE_COLORS = [0xe98566, 0x74c69d, 0xf2cc8f, 0x8ecae6];
+const vendingFrameTex = canvasTexture(256, 512, (ctx, w, h) => {
+  ctx.clearRect(0, 0, w, h);
+  ctx.shadowColor = 'rgba(255, 245, 218, 0.9)';
+  ctx.shadowBlur = 26;
+  ctx.strokeStyle = 'rgba(255, 252, 235, 0.92)';
+  ctx.lineWidth = 9;
+  ctx.beginPath();
+  ctx.rect(12, 12, w - 24, h - 24);
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.18)';
+  ctx.lineWidth = 22;
+  ctx.beginPath();
+  ctx.rect(5, 5, w - 10, h - 10);
+  ctx.stroke();
+});
+
+function makeDrinkBottle(color, home, machine, index) {
+  const group = new THREE.Group();
+  group.position.copy(home);
+  world.add(group);
+
+  const body = cylinder(group, toon(color, { soft: true }), 0.032, 0.029, 0.15, 0, 0, 0, {
+    seg: 8, cast: false, receive: false, outline: 0.005,
+  });
+  const label = cylinder(group, basic(0xfaf4e3), 0.033, 0.033, 0.022, 0, 0.008, 0, {
+    seg: 8, cast: false, receive: false,
+  });
+  label.renderOrder = 1;
+  cylinder(group, toon(color), 0.021, 0.028, 0.032, 0, 0.092, 0, { seg: 8, cast: false, receive: false });
+  cylinder(group, toon(color), 0.019, 0.019, 0.014, 0, 0.115, 0, { seg: 8, cast: false, receive: false });
+
+  const glowMat = new THREE.SpriteMaterial({
+    map: RADIAL_TEX,
+    color: 0xffefc2,
+    transparent: true,
+    opacity: 0,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    depthTest: true,
+    fog: false,
+  });
+  const glow = new THREE.Sprite(glowMat);
+  glow.position.set(0, 0.01, 0);
+  glow.scale.set(0.22, 0.22, 1);
+  group.add(glow);
+
+  const hit = addHitSphere(0.14, 0, 0, 0, group, null);
+  const record = {
+    type: 'bottle',
+    group,
+    home: home.clone(),
+    machine,
+    index,
+    selected: false,
+    targetLift: 0,
+    lift: 0,
+    phase: Math.random() * TAU,
+    hit,
+    glow,
+    glowMat,
+  };
+  hit.userData.interaction = { type: 'bottle', bottle: record, machine };
+  machine.bottles.push(record);
+  return record;
+}
+
+for (let i = 0; i < VENDING_Z.length; i++) {
+  const z = VENDING_Z[i];
+  const machine = {
+    type: 'vending',
+    index: i,
+    z,
+    bottles: [],
+    selected: -1,
+    litUntil: 0,
+    glow: 0,
+    overlay: null,
+    light: null,
+    halo: null,
+    frameGlow: null,
+  };
+
+  const overlayMat = new THREE.MeshBasicMaterial({
+    color: i === 0 ? 0xffd9c8 : 0xcdf3ff,
+    transparent: true,
+    opacity: 0,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    toneMapped: false,
+  });
+  const overlay = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 1.8), overlayMat);
+  overlay.position.set(2.114, 1.23, z);
+  overlay.rotation.y = Math.PI / 2;
+  overlay.renderOrder = 2;
+  overlay.castShadow = false;
+  world.add(overlay);
+  machine.overlay = overlay;
+
+  const light = new THREE.PointLight(i === 0 ? 0xffc6ad : 0xa9e8ff, 0, 2.7, 2.0);
+  light.position.set(2.48, 1.35, z);
+  light.castShadow = false;
+  world.add(light);
+  machine.light = light;
+
+  const haloMat = new THREE.SpriteMaterial({
+    map: RADIAL_TEX,
+    color: i === 0 ? 0xffd8c4 : 0xc4f0ff,
+    transparent: true,
+    opacity: 0,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    depthTest: true,
+    fog: false,
+  });
+  const halo = new THREE.Sprite(haloMat);
+  halo.position.set(2.33, 1.32, z);
+  halo.scale.set(1.05, 1.42, 1);
+  halo.renderOrder = 6;
+  world.add(halo);
+  machine.halo = halo;
+
+  const frameMat = new THREE.MeshBasicMaterial({
+    map: vendingFrameTex,
+    color: i === 0 ? 0xffd4c0 : 0xc6efff,
+    transparent: true,
+    opacity: 0,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    toneMapped: false,
+  });
+  const frameGlow = new THREE.Mesh(new THREE.PlaneGeometry(0.94, 1.88), frameMat);
+  frameGlow.position.set(2.118, 1.23, z);
+  frameGlow.rotation.y = Math.PI / 2;
+  frameGlow.renderOrder = 4;
+  frameGlow.castShadow = false;
+  world.add(frameGlow);
+  machine.frameGlow = frameGlow;
+
+  addHitBox(0.94, 1.9, 1.02, 1.64, 1.23, z, world, { type: 'vending', machine });
+  // A small display tray at the base, so the two 3D drinks look placed there
+  // rather than floating on top of the painted product rows.
+  box(world, M.metalDark, 0.2, 0.018, 0.46, 2.16, 0.462, z, { cast: false, receive: false });
+  box(world, M.metalLight, 0.018, 0.035, 0.46, 2.26, 0.472, z, { cast: false, receive: false });
+  const bottleHome = [
+    new THREE.Vector3(2.19, 0.555, z - 0.17),
+    new THREE.Vector3(2.19, 0.555, z + 0.17),
+  ];
+  bottleHome.forEach((home, bi) => {
+    makeDrinkBottle(BOTTLE_COLORS[(i * 2 + bi) % BOTTLE_COLORS.length], home, machine, bi);
+  });
+  vendingInteract.push(machine);
+}
+
+function wakeVending(machine) {
+  machine.litUntil = performance.now() + 3400;
+  playVendingChime();
+}
+
+function selectBottle(bottle) {
+  const machine = bottle.machine;
+  if (machine.selected >= 0) {
+    const previous = machine.bottles[machine.selected];
+    if (previous && previous !== bottle) {
+      previous.selected = false;
+      previous.targetLift = 0;
+    }
+  }
+  if (bottle.selected) {
+    bottle.selected = false;
+    bottle.targetLift = 0;
+    machine.selected = -1;
+  } else {
+    bottle.selected = true;
+    bottle.targetLift = 1;
+    machine.selected = bottle.index;
+  }
+}
+
+// ------------------------------------------------------------
+// Bicycle: bell and short, bounded dragging
+// ------------------------------------------------------------
+const bikeState = {
+  current: new THREE.Vector2(0, 0),
+  target: new THREE.Vector2(0, 0),
+  bellShake: 0,
+  dragging: false,
+};
+const BIKE_BOUNDS = {
+  xMin: 0.0,
+  xMax: 0.82,
+  zMin: -0.2,
+  zMax: 0.48,
+};
+const bikeBell = bikeKit.userData.bell;
+const bikeBellBasePos = bikeBell ? bikeBell.position.clone() : new THREE.Vector3();
+const bikeBellBaseRot = bikeBell ? bikeBell.rotation.clone() : new THREE.Euler();
+addHitBox(0.92, 0.9, 1.45, 2.55, 0.63, -1.0, bikeKit, { type: 'bike' });
+if (bikeBell) {
+  addHitSphere(0.15, bikeBellBasePos.x, bikeBellBasePos.y, bikeBellBasePos.z, bikeKit, { type: 'bikeBell' });
+}
+
+function ringBikeBell() {
+  bikeState.bellShake = 1;
+  playBikeBell();
+}
+
+// ------------------------------------------------------------
+// Umbrella stand: a center umbrella that opens and closes
+// ------------------------------------------------------------
+const umbrellaState = { open: 0, target: 0 };
+const umbrellaGroup = new THREE.Group();
+umbrellaGroup.position.set(-0.7, SIDEWALK_TOP, -0.63);
+world.add(umbrellaGroup);
+const umbrellaShaft = cylinder(umbrellaGroup, M.metalDark, 0.012, 0.012, 1.12, 0, 0.56, 0, {
+  seg: 8, cast: false, receive: false,
+});
+const umbrellaHandle = barBetween(umbrellaGroup, M.metalDark, [0, 0.04, 0], [-0.1, 0.02, 0.1], 0.012);
+umbrellaHandle.castShadow = false;
+const umbrellaClosed = new THREE.Mesh(
+  new THREE.ConeGeometry(0.06, 0.55, 8, 1, true),
+  toon(0x42634f, { side: THREE.DoubleSide })
+);
+umbrellaClosed.position.y = 0.79;
+umbrellaClosed.castShadow = false;
+umbrellaGroup.add(umbrellaClosed);
+const umbrellaOpen = new THREE.Mesh(
+  new THREE.ConeGeometry(0.27, 0.16, 14, 1, true),
+  toon(0x42634f, { side: THREE.DoubleSide })
+);
+umbrellaOpen.position.y = 1.15;
+umbrellaOpen.scale.setScalar(0.01);
+umbrellaOpen.visible = false;
+umbrellaOpen.castShadow = false;
+umbrellaGroup.add(umbrellaOpen);
+const umbrellaTip = new THREE.Mesh(new THREE.SphereGeometry(0.022, 7, 5), M.metalLight);
+umbrellaTip.position.y = 1.24;
+umbrellaTip.visible = false;
+umbrellaGroup.add(umbrellaTip);
+addHitBox(0.42, 1.15, 0.42, -0.7, 0.82, -0.63, world, { type: 'umbrella' });
+
+function toggleUmbrella() {
+  umbrellaState.target = umbrellaState.target > 0.5 ? 0 : 1;
+}
+
+// ------------------------------------------------------------
+// Automatic door: click or approach, then close by itself
+// ------------------------------------------------------------
+const doorState = {
+  open: 0,
+  target: 0,
+  timer: 0,
+  closeAt: 0,
+  cooldown: 0,
+  proximityCheck: 0.4,
+};
+const doorWorldPoint = new THREE.Vector3(0.23, 1.45, -0.9);
+const doorHit = addHitPlane(1.4, 2.05, 0.23, 1.5, -0.855, world, { type: 'door' });
+doorHit.layers.set(HIT_LAYER);
+const doorRevealLight = new THREE.PointLight(0xffe3b7, 0, 3.4, 2.0);
+doorRevealLight.position.set(0.23, 1.55, -0.3);
+doorRevealLight.castShadow = false;
+world.add(doorRevealLight);
+
+function openDoor(resetTimer = true) {
+  doorState.target = 1;
+  if (resetTimer) {
+    doorState.closeAt = performance.now() + 4800;
+    doorState.timer = 4.8;
+  }
+}
+
+// ------------------------------------------------------------
+// Posters: pause and enlarge ever so slightly
+// ------------------------------------------------------------
+const posterInteract = [];
+posterPlanes.forEach((poster) => {
+  const record = {
+    type: 'poster',
+    mesh: poster,
+    fit: 1,
+    targetFit: 1,
+    baseScale: poster.scale.clone(),
+  };
+  poster.userData.interaction = record;
+  interactionHitMeshes.push(poster);
+  const pad = new THREE.Mesh(new THREE.PlaneGeometry(0.62, 0.78), INVISIBLE_HIT_MAT);
+  pad.position.copy(poster.position);
+  pad.quaternion.copy(poster.quaternion);
+  pad.translateZ(0.012);
+  pad.layers.set(HIT_LAYER);
+  pad.castShadow = false;
+  pad.receiveShadow = false;
+  pad.userData.interaction = record;
+  world.add(pad);
+  interactionHitMeshes.push(pad);
+  posterInteract.push(record);
+});
+
+function togglePoster(record) {
+  record.targetFit = record.targetFit > 1.01 ? 1 : 1.065;
+}
+
+// ------------------------------------------------------------
+// Trees: leaf swish and a soft warm halo
+// ------------------------------------------------------------
+const treeInteract = [];
+interactiveTrees.forEach((tree) => {
+  const glowMat = new THREE.SpriteMaterial({
+    map: RADIAL_TEX,
+    color: 0xfff6d8,
+    transparent: true,
+    opacity: 0,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    depthTest: false,
+    fog: false,
+  });
+  const glow = new THREE.Sprite(glowMat);
+  glow.position.set(tree.x, tree.canopyY, tree.z);
+  glow.scale.set(tree.glowBase * 1.8, tree.glowBase * 1.8, 1);
+  glow.renderOrder = 14;
+  world.add(glow);
+
+  // Tiny warm glints nestled in the crown, like sun caught between the leaves.
+  const glints = [];
+  [
+    [-0.32, 0.16, 0.24],
+    [0.28, 0.05, 0.26],
+    [-0.08, -0.16, -0.3],
+    [0.38, -0.18, 0.1],
+    [-0.3, 0.28, -0.12],
+  ].forEach(([dx, dy, dz], i) => {
+    const glintMat = new THREE.SpriteMaterial({
+      map: RADIAL_TEX,
+      color: 0xfff3c7,
+      transparent: true,
+      opacity: 0,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      depthTest: false,
+      fog: false,
+    });
+    const glint = new THREE.Sprite(glintMat);
+    glint.position.set(
+      tree.x + dx * tree.scale,
+      tree.canopyY + dy * tree.scale,
+      tree.z + dz * tree.scale
+    );
+    glint.scale.setScalar((0.18 + (i % 3) * 0.035) * tree.scale * 2.0);
+    glint.renderOrder = 15;
+    world.add(glint);
+    glints.push(glint);
+  });
+
+  const patchMat = new THREE.MeshBasicMaterial({
+    map: RADIAL_TEX,
+    color: 0xffe6a8,
+    transparent: true,
+    opacity: 0,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    fog: false,
+  });
+  const patch = new THREE.Mesh(new THREE.PlaneGeometry(tree.glowBase * 1.5, tree.glowBase * 1.2), patchMat);
+  patch.rotation.x = -Math.PI / 2;
+  patch.position.set(tree.x, 0.174, tree.z);
+  patch.renderOrder = 4;
+  world.add(patch);
+
+  addHitSphere(0.7 * tree.scale, tree.x, tree.canopyY, tree.z, world, { type: 'tree', tree });
+  treeInteract.push({ tree, glow, glowMat, glints, patch, patchMat });
+});
+
+// ------------------------------------------------------------
+// Balloons: short float on tap, soft long-press drag
+// ------------------------------------------------------------
+balloonRecords.forEach((record) => {
+  interactionHitMeshes.push(record.hit);
+});
+
+// ------------------------------------------------------------
+// Pointer gestures
+// ------------------------------------------------------------
+let activeGesture = null;
+
+function startBalloonDrag(gesture) {
+  if (!gesture || gesture.kind !== 'balloon' || gesture.dragging) return;
+  gesture.dragging = true;
+  gesture.record.dragActive = true;
+  gesture.record.returning = false;
+  const worldPos = new THREE.Vector3();
+  gesture.record.group.getWorldPosition(worldPos);
+  gesture.planeY = worldPos.y;
+  gesture.startPoint = pointerOnHorizontalPlane(gesture.lastEvent, gesture.planeY);
+  if (!gesture.startPoint) {
+    gesture.startPoint = worldPos.clone();
+  }
+  const localStart = balloonPivot.worldToLocal(gesture.startPoint.clone());
+  gesture.grabOffset = new THREE.Vector3(
+    localStart.x - gesture.record.base.x,
+    0,
+    localStart.z - gesture.record.base.z
+  );
+}
+
+function finishGesture() {
+  if (!activeGesture) return;
+  const gesture = activeGesture;
+  activeGesture = null;
+  if (gesture.holdTimer) clearTimeout(gesture.holdTimer);
+  if (gesture.kind === 'balloon') {
+    const record = gesture.record;
+    record.dragActive = false;
+    if (gesture.dragging) {
+      record.returning = true;
+    } else if (!gesture.moved) {
+      record.bob = 1;
+      record.bobT = 0;
+    }
+  }
+  if (gesture.kind === 'bike') {
+    bikeState.dragging = false;
+    if (!gesture.moved && gesture.hit.data.type === 'bikeBell') ringBikeBell();
+  }
+  if (gesture.kind === 'tap' && !gesture.moved) {
+    const data = gesture.hit.data;
+    if (data.type === 'vending') {
+      wakeVending(data.machine);
+    } else if (data.type === 'bottle') {
+      wakeVending(data.machine);
+      selectBottle(data.bottle);
+    } else if (data.type === 'door') {
+      openDoor();
+    } else if (data.type === 'umbrella') {
+      toggleUmbrella();
+    } else if (data.type === 'tree') {
+      data.tree.swing = 1.25;
+    } else if (data.type === 'poster') {
+      togglePoster(data.record || data);
+    }
+  }
+  controls.enabled = true;
+  try {
+    if (renderer.domElement.hasPointerCapture(gesture.pointerId)) {
+      renderer.domElement.releasePointerCapture(gesture.pointerId);
+    }
+  } catch (e) {
+    // capture is best-effort
+  }
+  renderer.domElement.style.cursor = '';
+}
+
+function cancelGesture() {
+  if (!activeGesture) return;
+  const gesture = activeGesture;
+  if (gesture.holdTimer) clearTimeout(gesture.holdTimer);
+  if (gesture.kind === 'balloon') {
+    gesture.record.dragActive = false;
+    gesture.record.returning = true;
+  }
+  activeGesture = null;
+  controls.enabled = true;
+  try {
+    if (renderer.domElement.hasPointerCapture(gesture.pointerId)) {
+      renderer.domElement.releasePointerCapture(gesture.pointerId);
+    }
+  } catch (e) {
+    // ignore
+  }
+  renderer.domElement.style.cursor = '';
+}
+
+function onPointerDown(event) {
+  if (event.target !== renderer.domElement) return;
+  if (event.pointerType === 'mouse' && event.button !== 0) return;
+  const hit = findInteractionHit(event);
+  if (!hit) return;
+
+  ensureAudio();
+  event.stopPropagation();
+  event.preventDefault();
+
+  const x = event.clientX;
+  const y = event.clientY;
+  const pointerId = event.pointerId;
+  try {
+    renderer.domElement.setPointerCapture(pointerId);
+  } catch (e) {
+    // ignore
+  }
+
+  if (hit.data.type === 'bike' || hit.data.type === 'bikeBell') {
+    const point = pointerOnHorizontalPlane(event, SIDEWALK_TOP + 0.02);
+    activeGesture = {
+      kind: 'bike',
+      pointerId,
+      hit,
+      startX: x,
+      startY: y,
+      moved: false,
+      startPoint: point,
+      startOffset: bikeState.current.clone(),
+    };
+    bikeState.dragging = false;
+    controls.enabled = false;
+    renderer.domElement.style.cursor = 'grabbing';
+  } else if (hit.data.type === 'balloon') {
+    const gesture = {
+      kind: 'balloon',
+      pointerId,
+      hit,
+      startX: x,
+      startY: y,
+      moved: false,
+      lastEvent: event,
+      dragging: false,
+      record: hit.data.record,
+      holdTimer: null,
+      planeY: 0,
+      startPoint: null,
+    };
+    gesture.holdTimer = setTimeout(() => {
+      if (activeGesture === gesture && !gesture.moved) startBalloonDrag(gesture);
+    }, 230);
+    activeGesture = gesture;
+    controls.enabled = false;
+    renderer.domElement.style.cursor = 'grabbing';
+  } else {
+    activeGesture = {
+      kind: 'tap',
+      pointerId,
+      hit,
+      startX: x,
+      startY: y,
+      moved: false,
+    };
+    renderer.domElement.style.cursor = 'pointer';
+  }
+}
+
+function onPointerMove(event) {
+  if (!activeGesture) {
+    if (event.pointerType === 'mouse' && event.target === renderer.domElement) {
+      const hit = findInteractionHit(event);
+      renderer.domElement.style.cursor = hit ? 'pointer' : '';
+    }
+    return;
+  }
+  const gesture = activeGesture;
+  if (event.pointerId !== gesture.pointerId) return;
+
+  gesture.lastEvent = event;
+  const dx = event.clientX - gesture.startX;
+  const dy = event.clientY - gesture.startY;
+  if (!gesture.moved && dx * dx + dy * dy > 36) {
+    gesture.moved = true;
+    if (gesture.kind === 'balloon' && !gesture.dragging) {
+      if (gesture.holdTimer) clearTimeout(gesture.holdTimer);
+      startBalloonDrag(gesture);
+    }
+  }
+
+  if (gesture.kind === 'bike') {
+    if (!gesture.moved) return;
+    if (!bikeState.dragging) {
+      bikeState.dragging = true;
+      if (!gesture.startPoint) gesture.startPoint = pointerOnHorizontalPlane(event, SIDEWALK_TOP + 0.02);
+      if (!gesture.startOffset) gesture.startOffset = bikeState.current.clone();
+    }
+    const point = pointerOnHorizontalPlane(event, SIDEWALK_TOP + 0.02);
+    if (!point || !gesture.startPoint) return;
+    const nx = gesture.startOffset.x + point.x - gesture.startPoint.x;
+    const nz = gesture.startOffset.y + point.z - gesture.startPoint.z;
+    bikeState.target.x = clamp(nx, BIKE_BOUNDS.xMin, BIKE_BOUNDS.xMax);
+    bikeState.target.y = clamp(nz, BIKE_BOUNDS.zMin, BIKE_BOUNDS.zMax);
+    event.preventDefault();
+  } else if (gesture.kind === 'balloon' && gesture.dragging) {
+    const point = pointerOnHorizontalPlane(event, gesture.planeY);
+    if (!point) return;
+    const local = balloonPivot.worldToLocal(point.clone());
+    const record = gesture.record;
+    record.offset.x = clamp(local.x - record.base.x - gesture.grabOffset.x, -0.6, 0.6);
+    record.offset.z = clamp(local.z - record.base.z - gesture.grabOffset.z, -0.46, 0.46);
+    record.offset.y = 0;
+    record.velocity.set(0, 0, 0);
+    event.preventDefault();
+  }
+}
+
+function onPointerUp(event) {
+  if (!activeGesture || event.pointerId !== activeGesture.pointerId) return;
+  finishGesture();
+}
+
+function onPointerCancel(event) {
+  if (!activeGesture || event.pointerId !== activeGesture.pointerId) return;
+  cancelGesture();
+}
+
+window.addEventListener('pointerdown', onPointerDown, true);
+window.addEventListener('pointermove', onPointerMove, { passive: false });
+window.addEventListener('pointerup', onPointerUp);
+window.addEventListener('pointercancel', onPointerCancel);
+window.addEventListener('blur', () => {
+  if (activeGesture) cancelGesture();
+});
+renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
+
+// ------------------------------------------------------------
+// Gentle per-frame interaction update
+// ------------------------------------------------------------
+function updateInteractions(dt, t) {
+  // vending lights and floating bottles
+  vendingInteract.forEach((machine) => {
+    const targetGlow = performance.now() < machine.litUntil ? 1 : 0;
+    machine.glow += (targetGlow - machine.glow) * Math.min(1, dt * 3.4);
+    machine.overlay.material.opacity = machine.glow * 0.2;
+    machine.halo.material.opacity = machine.glow * 0.12;
+    machine.frameGlow.material.opacity = machine.glow * 0.4;
+    machine.light.intensity = machine.glow * (weatherMix > 0.5 ? 0.55 : 0.95);
+    machine.bottles.forEach((bottle) => {
+      bottle.lift += (bottle.targetLift - bottle.lift) * Math.min(1, dt * 2.6);
+      const lift = bottle.lift;
+      bottle.group.position.set(
+        bottle.home.x + 0.08 * lift,
+        bottle.home.y + 0.12 * lift + Math.sin(t * 2.1 + bottle.phase) * 0.006 * lift,
+        bottle.home.z
+      );
+      bottle.group.rotation.z = Math.sin(t * 1.7 + bottle.phase) * 0.055 * lift;
+      bottle.glowMat.opacity = lift * 0.42;
+      bottle.glow.scale.setScalar(0.26 + 0.03 * Math.sin(t * 2.4 + bottle.phase));
+    });
+  });
+
+  // bicycle translation + bell tremble
+  const ease = Math.min(1, dt * 6.0);
+  bikeState.current.x += (bikeState.target.x - bikeState.current.x) * ease;
+  bikeState.current.y += (bikeState.target.y - bikeState.current.y) * ease;
+  bikeKit.position.x = bikeState.current.x;
+  bikeKit.position.z = bikeState.current.y;
+  balloonPivot.position.x = balloonHome.x + bikeState.current.x;
+  balloonPivot.position.z = balloonHome.z + bikeState.current.y;
+
+  bikeState.bellShake *= Math.exp(-dt * 3.2);
+  if (bikeBell && bikeState.bellShake > 0.002) {
+    bikeBell.rotation.z = bikeBellBaseRot.z + Math.sin(t * 42.0) * 0.16 * bikeState.bellShake;
+    bikeBell.rotation.x = bikeBellBaseRot.x + Math.cos(t * 35.0) * 0.055 * bikeState.bellShake;
+    bikeBell.position.x = bikeBellBasePos.x + Math.sin(t * 52.0) * 0.004 * bikeState.bellShake;
+  } else if (bikeBell) {
+    bikeBell.rotation.z = bikeBellBaseRot.z;
+    bikeBell.rotation.x = bikeBellBaseRot.x;
+    bikeBell.position.x = bikeBellBasePos.x;
+  }
+
+  // umbrella opening
+  umbrellaState.open += (umbrellaState.target - umbrellaState.open) * Math.min(1, dt * 3.0);
+  const u = clamp(umbrellaState.open, 0, 1);
+  const ue = easeOutCubic(u);
+  umbrellaGroup.position.y = SIDEWALK_TOP + 0.055 * ue;
+  umbrellaClosed.visible = ue < 0.92;
+  umbrellaClosed.scale.set(1 - 0.72 * ue, 1 - 0.62 * ue, 1 - 0.72 * ue);
+  umbrellaOpen.visible = ue > 0.02;
+  umbrellaTip.visible = ue > 0.3;
+  umbrellaOpen.scale.setScalar(Math.max(0.015, ue));
+  umbrellaTip.position.y = 1.16 + 0.08 * ue;
+
+  // automatic door (wall-clock timers so low frame rates do not hold it open)
+  if (doorState.closeAt > 0 && performance.now() >= doorState.closeAt) {
+    doorState.closeAt = 0;
+    doorState.timer = 0;
+    doorState.target = 0;
+  }
+  if (doorState.closeAt > 0) {
+    doorState.timer = Math.max(0, (doorState.closeAt - performance.now()) / 1000);
+  }
+  doorState.cooldown = Math.max(0, doorState.cooldown - dt);
+  doorState.proximityCheck -= dt;
+  if (doorState.proximityCheck <= 0) {
+    doorState.proximityCheck = 0.4;
+    if (doorState.cooldown <= 0 && doorState.target < 0.5 &&
+        camera.position.distanceTo(doorWorldPoint) < 8.6) {
+      openDoor();
+      doorState.cooldown = 10.0;
+    }
+  }
+  doorState.open += (doorState.target - doorState.open) * Math.min(1, dt * 2.4);
+  const doorOpen = clamp(doorState.open, 0, 1);
+  DOOR.left.position.x = -0.62 * doorOpen;
+  DOOR.right.position.x = 0.62 * doorOpen;
+  doorRevealLight.intensity = doorOpen * (weatherMix * 0.55 + (1 - weatherMix) * 0.18);
+
+  // tree crowns and soft halos
+  treeInteract.forEach(({ tree, glow, glowMat, glints, patch, patchMat }) => {
+    tree.swing *= Math.exp(-dt * 1.15);
+    const swing = tree.swing;
+    tree.leaves.forEach((leaf) => {
+      leaf.mesh.rotation.z = leaf.baseZ + Math.sin(t * 1.05 + leaf.phase) * 0.006 +
+        Math.sin(t * 4.1 + leaf.phase * 1.7) * 0.035 * swing;
+      leaf.mesh.rotation.x = leaf.baseX + Math.cos(t * 0.9 + leaf.phase) * 0.004 +
+        Math.cos(t * 3.7 + leaf.phase) * 0.026 * swing;
+    });
+    glowMat.opacity = 0.34 * swing;
+    glow.scale.setScalar(tree.glowBase * 1.8 * (1 + 0.035 * Math.sin(t * 2.0 + tree.x)));
+    glints.forEach((glint, i) => {
+      glint.material.opacity = swing * (0.26 + 0.1 * Math.sin(t * 2.2 + i * 1.7));
+      glint.position.y = tree.canopyY + (i - 2) * 0.055 * tree.scale +
+        Math.sin(t * 1.4 + i) * 0.025 * tree.scale * swing;
+    });
+    patchMat.opacity = 0.2 * swing;
+    patch.scale.setScalar(1 + 0.04 * Math.sin(t * 1.8 + tree.z));
+  });
+
+  // poster breath
+  posterInteract.forEach((poster) => {
+    poster.fit += (poster.targetFit - poster.fit) * Math.min(1, dt * 4.0);
+    poster.mesh.scale.copy(poster.baseScale).multiplyScalar(poster.fit);
+  });
+
+  // balloons: slow spring back to their home positions
+  balloonRecords.forEach((record) => {
+    if (!record.dragActive) {
+      const k = 4.2;
+      const damping = 2.5;
+      record.velocity.x += (-record.offset.x * k - record.velocity.x * damping) * dt;
+      record.velocity.z += (-record.offset.z * k - record.velocity.z * damping) * dt;
+      record.offset.x += record.velocity.x * dt;
+      record.offset.z += record.velocity.z * dt;
+      if (Math.abs(record.offset.x) < 0.0005 && Math.abs(record.velocity.x) < 0.0005) {
+        record.offset.x = 0;
+        record.velocity.x = 0;
+      }
+      if (Math.abs(record.offset.z) < 0.0005 && Math.abs(record.velocity.z) < 0.0005) {
+        record.offset.z = 0;
+        record.velocity.z = 0;
+      }
+    }
+    record.bobT += dt;
+    record.bob *= Math.exp(-dt * 0.7);
+    const bobY = Math.sin(record.bobT * 3.2) * 0.05 * record.bob;
+    record.group.position.set(
+      record.base.x + record.offset.x,
+      record.base.y + bobY,
+      record.base.z + record.offset.z
+    );
+    record.group.rotation.z = Math.sin(t * 1.1 + record.phase) * 0.035 + record.offset.x * 0.18;
+    updateBalloonString(record);
+  });
+}
+
+const interactionDebug = {
+  hitMeshes: interactionHitMeshes,
+  vending: vendingInteract,
+  bike: bikeState,
+  door: doorState,
+  umbrella: umbrellaState,
+  trees: treeInteract,
+  posters: posterInteract,
+  balloons: balloonRecords,
+  ringBikeBell,
+  wakeVending,
+  selectBottle,
+  openDoor,
+  toggleUmbrella,
+  togglePoster,
+};
+
+
+// ------------------------------------------------------------
 // Warm airborne details
 // ------------------------------------------------------------
 function updateAtmosphere(t, dt, m) {
@@ -4939,6 +5937,7 @@ function animate() {
   }
 
   updateAtmosphere(t, dt, weatherMix);
+  updateInteractions(dt, t);
 
   if (!shadowFrozen) {
     shadowFrozen = true;
@@ -4978,7 +5977,7 @@ renderer.shadowMap.autoUpdate = false;
 renderer.shadowMap.needsUpdate = true;
 window.__diorama = {
   scene, camera, controls, renderer, composer, kits, wetKit, TEX, REFLECT_TEX,
-  weatherLights, sunnyDecor, cloudGroup,
+  weatherLights, sunnyDecor, cloudGroup, interactions: interactionDebug,
   setWeatherMode,
   getWeatherMode: () => (weatherTarget > 0.5 ? 'sunny' : 'rain'),
   getWeatherMix: () => weatherMix,
