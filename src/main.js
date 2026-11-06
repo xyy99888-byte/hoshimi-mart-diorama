@@ -4359,10 +4359,12 @@ texturedPlane(sunnyDecor, TEX.sunnySticker, 0.27, 0.27, 0.72, 1.02, -0.915, { tr
   });
 });
 
-// little flowers in the bicycle basket
+// little flowers in the bicycle basket (kept with the bike, not the sunny layer)
+const bikeBasketFlowerGroup = new THREE.Group();
+sunnyDecor.add(bikeBasketFlowerGroup);
 for (let i = 0; i < 4; i++) {
-  cylinder(sunnyDecor, toon(0x4d8a43), 0.006, 0.008, 0.28, 2.55 + rand(-0.1, 0.1), SIDEWALK_TOP + 1.17, -0.3, { seg: 5, cast: false, receive: false });
-  sphere(sunnyDecor, FLOWER_MATS[i % FLOWER_MATS.length], 0.055, 2.55 + rand(-0.1, 0.1), SIDEWALK_TOP + 1.31, -0.3, { seg: 6, cast: false });
+  cylinder(bikeBasketFlowerGroup, toon(0x4d8a43), 0.006, 0.008, 0.28, 2.55 + rand(-0.1, 0.1), SIDEWALK_TOP + 1.17, -0.3, { seg: 5, cast: false, receive: false });
+  sphere(bikeBasketFlowerGroup, FLOWER_MATS[i % FLOWER_MATS.length], 0.055, 2.55 + rand(-0.1, 0.1), SIDEWALK_TOP + 1.31, -0.3, { seg: 6, cast: false });
 }
 
 // festival bunting above the alley gate
@@ -4520,6 +4522,17 @@ function mergeOpaqueMeshesInKit(root) {
 kits.forEach((k) => {
   mergeOpaqueMeshesInKit(k);
 });
+
+// The bike-basket balloon string is attached to the bike itself, not to the
+// sunny decor layer, so it can never be left floating when the bicycle moves.
+sunnyDecor.remove(balloonPivot);
+bikeKit.add(balloonPivot);
+balloonPivot.position.copy(balloonHome);
+balloonPivot.visible = true;
+sunnyDecor.remove(bikeBasketFlowerGroup);
+bikeKit.add(bikeBasketFlowerGroup);
+bikeBasketFlowerGroup.position.set(0, 0, 0);
+bikeBasketFlowerGroup.visible = true;
 
 // ------------------------------------------------------------
 // Rain, splashes and soft light shafts
@@ -5088,6 +5101,8 @@ function applyWeather(mix) {
 
   // sunny decor + painted cloud dome
   sunnyDecor.visible = m > 0.34;
+  balloonPivot.visible = m > 0.34;
+  bikeBasketFlowerGroup.visible = m > 0.34;
   cloudGroup.visible = m > 0.015;
   cloudMat.opacity = 0.55 * smoothMix(0.1, 0.9, m);
   cloudSprites.forEach((s) => {
@@ -5316,7 +5331,7 @@ function playUmbrellaClose() {
 }
 
 function playDoorSlide(closing = false) {
-  playSound('door_slide', { volume: closing ? 0.34 : 0.38, rate: closing ? 0.95 : 1.0 });
+  playSound('door_slide', { volume: closing ? 0.23 : 0.26, rate: closing ? 0.9 : 0.94 });
 }
 
 function playTrashLid() {
@@ -5336,7 +5351,7 @@ function playBirdChirp() {
 }
 
 function playShopChime() {
-  playSound('shop_chime', { volume: 0.3 });
+  playSound('shop_chime', { volume: 0.2, rate: 0.92 });
 }
 
 // Mute button lives beside the weather controls.
@@ -5406,10 +5421,11 @@ const HIT_PRIORITY = {
   bottle: 9,
   door: 6,
   umbrellaBody: 8,
-  umbrellaStand: 8,
+  umbrellaStand: 12,
   tree: 5,
   poster: 6,
   balloon: 9,
+  balloonCluster: 2,
   trash: 10,
   lamp: 7,
   ac: 7,
@@ -5732,6 +5748,8 @@ const bikeBellBaseRot = bikeBell ? bikeBell.rotation.clone() : new THREE.Euler()
 const bikeBasketAnchor = new THREE.Object3D();
 bikeBasketAnchor.position.set(2.55, SIDEWALK_TOP + 0.895, -0.35);
 bikeKit.add(bikeBasketAnchor);
+bikeBasketAnchor.add(balloonPivot);
+balloonPivot.position.set(0, balloonHome.y - bikeBasketAnchor.position.y, 0);
 
 function returnBottleToMachine(bottle) {
   bottle.selected = false;
@@ -5796,7 +5814,7 @@ function ringBikeBell() {
 // Umbrella stand: take out, unfold the ribs, open the cloth, carry, return
 // ------------------------------------------------------------
 const UMBRELLA_STAND = { x: -0.7, z: -0.63 };
-const UMBRELLA_OUT = { x: -0.7, z: -0.18 };
+const UMBRELLA_OUT = { x: -1.25, z: 0.02 };
 const umbrellaState = {
   inStand: true,
   taking: false,
@@ -5825,51 +5843,234 @@ const umbrellaState = {
 const umbrellaGroup = new THREE.Group();
 umbrellaGroup.position.set(UMBRELLA_STAND.x, SIDEWALK_TOP, UMBRELLA_STAND.z);
 world.add(umbrellaGroup);
-const umbrellaShaft = cylinder(umbrellaGroup, M.metalDark, 0.012, 0.012, 1.15, 0, 0.575, 0, {
+
+// A long-handled Japanese vinyl umbrella. The canopy is skinned to eight rib
+// bones, so the cloth can only move where the ribs move.
+const UMBRELLA_HUB_Y = 1.24;
+const UMBRELLA_RIM_RADIUS = 0.38;
+const UMBRELLA_RIM_DROP = 0.105;
+const UMBRELLA_RIB_COUNT = 8;
+const UMBRELLA_RIB_LENGTH = Math.hypot(UMBRELLA_RIM_RADIUS, UMBRELLA_RIM_DROP);
+const UMBRELLA_UP = new THREE.Vector3(0, 1, 0);
+const umbrellaShaft = cylinder(umbrellaGroup, M.metalDark, 0.012, 0.012, 1.19, 0, 0.675, 0, {
   seg: 8, cast: false, receive: false,
 });
-const umbrellaHandle = barBetween(umbrellaGroup, M.metalDark, [0, 0.04, 0], [-0.11, 0.02, 0.1], 0.012);
+const umbrellaHandleCurve = new THREE.CatmullRomCurve3([
+  new THREE.Vector3(0, 0.09, 0),
+  new THREE.Vector3(0, 0.035, 0),
+  new THREE.Vector3(0.02, 0.018, 0.055),
+  new THREE.Vector3(0.085, 0.06, 0.12),
+  new THREE.Vector3(0.135, 0.12, 0.145),
+]);
+const umbrellaHandle = new THREE.Mesh(
+  new THREE.TubeGeometry(umbrellaHandleCurve, 16, 0.014, 7, false),
+  M.metalDark
+);
 umbrellaHandle.castShadow = false;
-const umbrellaClosed = new THREE.Mesh(
-  new THREE.ConeGeometry(0.06, 0.55, 8, 1, true),
-  toon(0x42634f, { side: THREE.DoubleSide })
-);
-umbrellaClosed.position.y = 0.79;
-umbrellaClosed.castShadow = false;
-umbrellaGroup.add(umbrellaClosed);
-const umbrellaOpen = new THREE.Mesh(
-  new THREE.ConeGeometry(0.3, 0.13, 16, 1, true),
-  toon(0x42634f, { side: THREE.DoubleSide })
-);
-umbrellaOpen.position.y = 1.13;
-umbrellaOpen.scale.setScalar(0.01);
-umbrellaOpen.visible = false;
-umbrellaOpen.castShadow = false;
-umbrellaGroup.add(umbrellaOpen);
-const umbrellaTip = new THREE.Mesh(new THREE.SphereGeometry(0.022, 7, 5), M.metalLight);
-umbrellaTip.position.y = 1.22;
-umbrellaTip.visible = false;
-umbrellaGroup.add(umbrellaTip);
+umbrellaGroup.add(umbrellaHandle);
+const umbrellaHubCap = new THREE.Mesh(new THREE.SphereGeometry(0.032, 9, 7), M.metalDark);
+umbrellaHubCap.scale.set(1, 0.65, 1);
+umbrellaHubCap.position.y = UMBRELLA_HUB_Y;
+umbrellaHubCap.castShadow = false;
+umbrellaGroup.add(umbrellaHubCap);
+const umbrellaTipCap = new THREE.Mesh(new THREE.ConeGeometry(0.019, 0.11, 7), M.metalLight);
+umbrellaTipCap.position.y = UMBRELLA_HUB_Y + 0.085;
+umbrellaTipCap.castShadow = false;
+umbrellaGroup.add(umbrellaTipCap);
+const umbrellaRunner = new THREE.Mesh(new THREE.TorusGeometry(0.026, 0.007, 6, 12), M.metalLight);
+umbrellaRunner.rotation.x = Math.PI / 2;
+umbrellaRunner.position.y = 0.92;
+umbrellaRunner.castShadow = false;
+umbrellaGroup.add(umbrellaRunner);
 
-// Eight dynamic ribs, animated around the hub before the fabric expands.
-const umbrellaRibs = [];
-const umbrellaRibGeo = new THREE.CylinderGeometry(0.007, 0.007, 1, 5);
-for (let i = 0; i < 8; i++) {
-  const rib = new THREE.Mesh(umbrellaRibGeo, M.metalDark);
-  rib.castShadow = false;
-  umbrellaGroup.add(rib);
-  umbrellaRibs.push({ mesh: rib, angle: (i / 8) * TAU + Math.PI / 8 });
+// Root bone keeps the canopy centre and hub together; the eight rib bones
+// each own one edge of the fabric.
+const umbrellaRootBone = new THREE.Bone();
+umbrellaRootBone.name = 'umbrella-root';
+umbrellaRootBone.position.set(0, UMBRELLA_HUB_Y, 0);
+umbrellaGroup.add(umbrellaRootBone);
+const umbrellaRibBones = [];
+const umbrellaRibMeshes = [];
+for (let i = 0; i < UMBRELLA_RIB_COUNT; i++) {
+  const angle = (i / UMBRELLA_RIB_COUNT) * TAU;
+  const openDir = new THREE.Vector3(
+    Math.cos(angle) * UMBRELLA_RIM_RADIUS,
+    -UMBRELLA_RIM_DROP,
+    Math.sin(angle) * UMBRELLA_RIM_RADIUS
+  ).normalize();
+  const closedDir = new THREE.Vector3(
+    Math.cos(angle) * 0.018,
+    -0.4,
+    Math.sin(angle) * 0.018
+  ).normalize();
+  const bone = new THREE.Bone();
+  bone.name = 'umbrella-rib-' + i;
+  bone.position.set(0, UMBRELLA_HUB_Y, 0);
+  bone.quaternion.setFromUnitVectors(UMBRELLA_UP, openDir);
+  umbrellaGroup.add(bone);
+  const ribMesh = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.004, 0.0065, UMBRELLA_RIB_LENGTH, 5),
+    M.metalDark
+  );
+  ribMesh.position.y = UMBRELLA_RIB_LENGTH * 0.5;
+  ribMesh.castShadow = false;
+  bone.add(ribMesh);
+  const tipMesh = new THREE.Mesh(new THREE.SphereGeometry(0.01, 6, 5), M.metalLight);
+  tipMesh.position.y = UMBRELLA_RIB_LENGTH;
+  tipMesh.castShadow = false;
+  bone.add(tipMesh);
+  umbrellaRibBones.push({ bone, openDir, closedDir });
+  umbrellaRibMeshes.push(ribMesh);
 }
-const umbrellaBodyHit = addHitBox(0.6, 1.3, 0.6, 0, 0.72, 0, umbrellaGroup, { type: 'umbrellaBody' });
+
+// Canopy geometry: one centre vertex bound to the root, then 32 angular
+// segments weighted between the two neighbouring rib bones. Vertices on a
+// rib are weighted 100% to that rib, so the fabric edge stays exactly on it.
+const UMBRELLA_CANOPY_RINGS = 6;
+const UMBRELLA_CANOPY_SEGMENTS = 32;
+const umbrellaCanopyPositions = [];
+const umbrellaCanopyColors = [];
+const umbrellaCanopyUvs = [];
+const umbrellaCanopySkinIndices = [];
+const umbrellaCanopySkinWeights = [];
+const umbrellaCanopyIndices = [];
+{
+  const dark = new THREE.Color(0x2d4942);
+  const rim = new THREE.Color(0xd9cfb4);
+  umbrellaCanopyPositions.push(0, UMBRELLA_HUB_Y, 0);
+  umbrellaCanopyColors.push(dark.r, dark.g, dark.b);
+  umbrellaCanopyUvs.push(0.5, 0.5);
+  umbrellaCanopySkinIndices.push(UMBRELLA_RIB_COUNT, 0, 0, 0);
+  umbrellaCanopySkinWeights.push(1, 0, 0, 0);
+  for (let ring = 1; ring <= UMBRELLA_CANOPY_RINGS; ring++) {
+    const t = ring / UMBRELLA_CANOPY_RINGS;
+    const radius = UMBRELLA_RIM_RADIUS * t;
+    const y = UMBRELLA_HUB_Y - UMBRELLA_RIM_DROP * Math.pow(t, 1.35);
+    for (let s = 0; s < UMBRELLA_CANOPY_SEGMENTS; s++) {
+      const angle = (s / UMBRELLA_CANOPY_SEGMENTS) * TAU;
+      const sector = angle / (TAU / UMBRELLA_RIB_COUNT);
+      const base = Math.floor(sector + 1e-6) % UMBRELLA_RIB_COUNT;
+      const frac = sector - Math.floor(sector);
+      const next = (base + 1) % UMBRELLA_RIB_COUNT;
+      const w0 = frac < 1e-5 ? 1 : 1 - frac;
+      const w1 = frac < 1e-5 ? 0 : frac;
+      umbrellaCanopyPositions.push(
+        Math.cos(angle) * radius,
+        y,
+        Math.sin(angle) * radius
+      );
+      const color = ring === UMBRELLA_CANOPY_RINGS ? rim : dark;
+      umbrellaCanopyColors.push(color.r, color.g, color.b);
+      umbrellaCanopyUvs.push(s / UMBRELLA_CANOPY_SEGMENTS, t);
+      umbrellaCanopySkinIndices.push(base, next, 0, 0);
+      umbrellaCanopySkinWeights.push(w0, w1, 0, 0);
+    }
+  }
+  // Centre fan to the first ring.
+  const firstRing = 1;
+  for (let s = 0; s < UMBRELLA_CANOPY_SEGMENTS; s++) {
+    const next = (s + 1) % UMBRELLA_CANOPY_SEGMENTS;
+    umbrellaCanopyIndices.push(0, firstRing + s, firstRing + next);
+  }
+  // Quads between rings.
+  for (let ring = 1; ring < UMBRELLA_CANOPY_RINGS; ring++) {
+    const aStart = 1 + (ring - 1) * UMBRELLA_CANOPY_SEGMENTS;
+    const bStart = 1 + ring * UMBRELLA_CANOPY_SEGMENTS;
+    for (let s = 0; s < UMBRELLA_CANOPY_SEGMENTS; s++) {
+      const next = (s + 1) % UMBRELLA_CANOPY_SEGMENTS;
+      umbrellaCanopyIndices.push(aStart + s, bStart + s, aStart + next);
+      umbrellaCanopyIndices.push(bStart + s, bStart + next, aStart + next);
+    }
+  }
+}
+const umbrellaCanopyGeometry = new THREE.BufferGeometry();
+umbrellaCanopyGeometry.setAttribute('position', new THREE.Float32BufferAttribute(umbrellaCanopyPositions, 3));
+umbrellaCanopyGeometry.setAttribute('color', new THREE.Float32BufferAttribute(umbrellaCanopyColors, 3));
+umbrellaCanopyGeometry.setAttribute('uv', new THREE.Float32BufferAttribute(umbrellaCanopyUvs, 2));
+umbrellaCanopyGeometry.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(umbrellaCanopySkinIndices, 4));
+umbrellaCanopyGeometry.setAttribute('skinWeight', new THREE.Float32BufferAttribute(umbrellaCanopySkinWeights, 4));
+umbrellaCanopyGeometry.setIndex(umbrellaCanopyIndices);
+umbrellaCanopyGeometry.computeVertexNormals();
+const umbrellaCanopyMaterial = new THREE.MeshToonMaterial({
+  color: 0xffffff,
+  gradientMap: TOON_RAMP,
+  vertexColors: true,
+  side: THREE.DoubleSide,
+  skinning: true,
+});
+const umbrellaCanopyMesh = new THREE.SkinnedMesh(umbrellaCanopyGeometry, umbrellaCanopyMaterial);
+umbrellaCanopyMesh.castShadow = false;
+umbrellaCanopyMesh.receiveShadow = false;
+umbrellaCanopyMesh.frustumCulled = false;
+umbrellaGroup.add(umbrellaCanopyMesh);
+umbrellaGroup.updateMatrixWorld(true);
+const umbrellaSkeleton = new THREE.Skeleton([
+  ...umbrellaRibBones.map((r) => r.bone),
+  umbrellaRootBone,
+]);
+umbrellaCanopyMesh.bind(umbrellaSkeleton);
+
+// Thin dark rib seams on the canopy top, bound 100% to the matching rib bone.
+// They make the fabric-to-rib attachment readable from above while staying
+// part of the same skeleton.
+const umbrellaSeamPositions = [];
+const umbrellaSeamSkinIndices = [];
+const umbrellaSeamSkinWeights = [];
+const umbrellaSeamIndices = [];
+for (let i = 0; i < UMBRELLA_RIB_COUNT; i++) {
+  const angle = (i / UMBRELLA_RIB_COUNT) * TAU;
+  const tangentX = -Math.sin(angle) * 0.008;
+  const tangentZ = Math.cos(angle) * 0.008;
+  const startVertex = umbrellaSeamPositions.length / 3;
+  for (let ring = 0; ring <= UMBRELLA_CANOPY_RINGS; ring++) {
+    const t = Math.max(0.035, ring / UMBRELLA_CANOPY_RINGS);
+    const radius = UMBRELLA_RIM_RADIUS * t;
+    const y = UMBRELLA_HUB_Y - UMBRELLA_RIM_DROP * Math.pow(t, 1.35) + 0.004;
+    const x = Math.cos(angle) * radius;
+    const z = Math.sin(angle) * radius;
+    umbrellaSeamPositions.push(x - tangentX, y, z - tangentZ, x + tangentX, y, z + tangentZ);
+    umbrellaSeamSkinIndices.push(i, 0, 0, 0, i, 0, 0, 0);
+    umbrellaSeamSkinWeights.push(1, 0, 0, 0, 1, 0, 0, 0);
+  }
+  for (let ring = 0; ring < UMBRELLA_CANOPY_RINGS; ring++) {
+    const a = startVertex + ring * 2;
+    const b = a + 2;
+    umbrellaSeamIndices.push(a, b, a + 1, b, b + 1, a + 1);
+  }
+}
+const umbrellaSeamGeometry = new THREE.BufferGeometry();
+umbrellaSeamGeometry.setAttribute('position', new THREE.Float32BufferAttribute(umbrellaSeamPositions, 3));
+umbrellaSeamGeometry.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(umbrellaSeamSkinIndices, 4));
+umbrellaSeamGeometry.setAttribute('skinWeight', new THREE.Float32BufferAttribute(umbrellaSeamSkinWeights, 4));
+umbrellaSeamGeometry.setIndex(umbrellaSeamIndices);
+umbrellaSeamGeometry.computeVertexNormals();
+const umbrellaSeamMesh = new THREE.SkinnedMesh(
+  umbrellaSeamGeometry,
+  new THREE.MeshToonMaterial({
+    color: 0x263d38,
+    gradientMap: TOON_RAMP,
+    side: THREE.DoubleSide,
+    skinning: true,
+  })
+);
+umbrellaSeamMesh.castShadow = false;
+umbrellaSeamMesh.frustumCulled = false;
+umbrellaGroup.add(umbrellaSeamMesh);
+umbrellaSeamMesh.bind(umbrellaSkeleton);
+
+function setUmbrellaBonePose(value) {
+  const e = clamp(value, 0, 1);
+  const dir = new THREE.Vector3();
+  umbrellaRibBones.forEach(({ bone, openDir, closedDir }) => {
+    dir.lerpVectors(closedDir, openDir, e).normalize();
+    bone.quaternion.setFromUnitVectors(UMBRELLA_UP, dir);
+  });
+  umbrellaRunner.position.y = lerp(0.88, 1.165, easeInOutCubic(e));
+}
+setUmbrellaBonePose(0);
+
+const umbrellaBodyHit = addHitBox(0.95, 1.45, 0.95, 0, 0.74, 0, umbrellaGroup, { type: 'umbrellaBody' });
 addHitBox(0.45, 1.15, 0.45, UMBRELLA_STAND.x, 0.82, UMBRELLA_STAND.z, world, { type: 'umbrellaStand' });
-
-function setUmbrellaRod(mesh, a, b) {
-  const dir = new THREE.Vector3().subVectors(b, a);
-  const len = Math.max(0.001, dir.length());
-  mesh.position.copy(a).addScaledVector(dir, 0.5);
-  mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize());
-  mesh.scale.set(1, len, 1);
-}
 
 function takeUmbrellaOut() {
   if (!umbrellaState.inStand) return;
@@ -5896,6 +6097,9 @@ function returnUmbrellaToStand() {
   umbrellaState.returnStartZ = umbrellaGroup.position.z;
   setUmbrellaOpenTarget(0, true);
   umbrellaState.dragging = false;
+  umbrellaState.tiltX = 0;
+  umbrellaState.tiltZ = 0;
+  umbrellaGroup.rotation.set(0, 0, 0);
   playUmbrellaClose();
 }
 
@@ -5916,18 +6120,24 @@ function toggleUmbrellaOpen() {
   setUmbrellaOpenTarget(umbrellaState.targetOpen > 0.5 ? 0 : 1, false);
 }
 
+function nearUmbrellaStandScreen(x, y) {
+  const projected = new THREE.Vector3(
+    UMBRELLA_STAND.x,
+    SIDEWALK_TOP + 0.82,
+    UMBRELLA_STAND.z
+  ).project(camera);
+  const sx = (projected.x * 0.5 + 0.5) * window.innerWidth;
+  const sy = (-projected.y * 0.5 + 0.5) * window.innerHeight;
+  return Math.hypot(x - sx, y - sy) < 30;
+}
+
 // ------------------------------------------------------------
-// Automatic door: click or approach, then close by itself
+// Sliding door: click to open, click again to close. No proximity trigger.
 // ------------------------------------------------------------
 const doorState = {
   open: 0,
   target: 0,
-  timer: 0,
-  closeAt: 0,
-  cooldown: 0,
-  proximityCheck: 0.4,
 };
-const doorWorldPoint = new THREE.Vector3(0.23, 1.45, -0.9);
 const doorHit = addHitPlane(1.4, 2.05, 0.23, 1.5, -0.855, world, { type: 'door' });
 doorHit.layers.set(HIT_LAYER);
 const doorRevealLight = new THREE.PointLight(0xffe3b7, 0, 3.4, 2.0);
@@ -5935,14 +6145,10 @@ doorRevealLight.position.set(0.23, 1.55, -0.3);
 doorRevealLight.castShadow = false;
 world.add(doorRevealLight);
 
-function openDoor(resetTimer = true) {
-  const wasClosed = doorState.target < 0.5;
-  doorState.target = 1;
-  if (wasClosed) playDoorSlide(false);
-  if (resetTimer) {
-    doorState.closeAt = performance.now() + 4800;
-    doorState.timer = 4.8;
-  }
+function toggleDoor() {
+  const opening = doorState.target < 0.5;
+  doorState.target = opening ? 1 : 0;
+  playDoorSlide(!opening);
 }
 
 // ------------------------------------------------------------
@@ -6103,9 +6309,21 @@ interactiveTrees.forEach((tree) => {
 // ------------------------------------------------------------
 // Balloons: short float on tap, soft long-press drag
 // ------------------------------------------------------------
+const balloonClusterState = { sway: 0, time: 0 };
+const balloonClusterHit = addHitSphere(0.27, 0, 0.56, 0, balloonPivot, { type: 'balloonCluster' });
+balloonClusterHit.renderOrder = -101;
 balloonRecords.forEach((record) => {
   interactionHitMeshes.push(record.hit);
 });
+
+function wobbleBalloonCluster() {
+  balloonClusterState.sway = 1;
+  balloonClusterState.time = 0;
+  balloonRecords.forEach((record, i) => {
+    record.bob = Math.max(record.bob, 0.48 + i * 0.04);
+    record.bobT = Math.min(record.bobT, 0.1 + i * 0.03);
+  });
+}
 
 // ------------------------------------------------------------
 // Trash bin, street lamp, AC, bird, sign, flower and weather spots
@@ -6330,8 +6548,8 @@ function pokeEave() {
   playWaterDrop();
 }
 
-// Store sign easter egg: three quick taps flash the interior neon.
-const shopSignState = { clicks: [], flash: 0 };
+// Store sign easter egg: three quick taps start a slow breathing glow.
+const shopSignState = { clicks: [], effect: 0, effectStart: 0, duration: 3.2 };
 addHitBox(5.35, 0.78, 0.3, STORE_CX, 3.1, -0.7, world, { type: 'shopSign' });
 const neonFlashMat = new THREE.SpriteMaterial({
   map: RADIAL_TEX,
@@ -6350,11 +6568,12 @@ neonFlash.renderOrder = 12;
 world.add(neonFlash);
 function pokeShopSign() {
   const now = performance.now();
-  shopSignState.clicks = shopSignState.clicks.filter((t) => now - t < 1250);
+  shopSignState.clicks = shopSignState.clicks.filter((t) => now - t < 1000);
   shopSignState.clicks.push(now);
   if (shopSignState.clicks.length >= 3) {
     shopSignState.clicks = [];
-    shopSignState.flash = 1.2;
+    shopSignState.effect = 1;
+    shopSignState.effectStart = now;
     playShopChime();
   }
 }
@@ -6397,6 +6616,7 @@ function finishGesture() {
     } else if (!gesture.moved) {
       record.bob = 1;
       record.bobT = 0;
+      wobbleBalloonCluster();
     }
   }
   if (gesture.kind === 'bike') {
@@ -6406,7 +6626,11 @@ function finishGesture() {
   if (gesture.kind === 'umbrella') {
     umbrellaState.dragging = false;
     if (!gesture.moved) {
-      toggleUmbrellaOpen();
+      if (nearUmbrellaStandScreen(gesture.startX, gesture.startY)) {
+        returnUmbrellaToStand();
+      } else {
+        toggleUmbrellaOpen();
+      }
     } else {
       const dist = Math.hypot(
         umbrellaGroup.position.x - UMBRELLA_STAND.x,
@@ -6437,13 +6661,20 @@ function finishGesture() {
       wakeVending(data.machine);
       selectBottle(data.bottle);
     } else if (data.type === 'door') {
-      openDoor();
+      toggleDoor();
     } else if (data.type === 'umbrellaStand') {
       if (umbrellaState.inStand) takeUmbrellaOut();
       else returnUmbrellaToStand();
     } else if (data.type === 'umbrellaBody') {
-      if (umbrellaState.inStand) takeUmbrellaOut();
-      else toggleUmbrellaOpen();
+      if (umbrellaState.inStand) {
+        takeUmbrellaOut();
+      } else if (nearUmbrellaStandScreen(gesture.startX, gesture.startY)) {
+        returnUmbrellaToStand();
+      } else {
+        toggleUmbrellaOpen();
+      }
+    } else if (data.type === 'balloonCluster') {
+      wobbleBalloonCluster();
     } else if (data.type === 'tree') {
       data.tree.swing = 1.25;
     } else if (data.type === 'poster') {
@@ -6783,8 +7014,6 @@ function updateInteractions(dt, t) {
   }
   bikeState.prevX = bikeKit.position.x;
   bikeState.prevZ = bikeKit.position.z;
-  balloonPivot.position.x = balloonHome.x + bikeState.current.x;
-  balloonPivot.position.z = balloonHome.z + bikeState.current.y;
 
   bikeState.bellShake *= Math.exp(-dt * 3.2);
   if (bikeBell && bikeState.bellShake > 0.002) {
@@ -6863,6 +7092,10 @@ function updateInteractions(dt, t) {
     umbrellaState.tiltX += (targetTiltX - umbrellaState.tiltX) * Math.min(1, dt * 4.0);
     umbrellaGroup.rotation.z = umbrellaState.tiltZ;
     umbrellaGroup.rotation.x = umbrellaState.tiltX;
+    // Lift by the small amount the handle needs while leaning, so no part of
+    // the umbrella ever dips through the pavement.
+    umbrellaGroup.position.y = SIDEWALK_TOP +
+      0.16 * (Math.abs(umbrellaState.tiltX) + Math.abs(umbrellaState.tiltZ));
   } else {
     umbrellaGroup.position.set(UMBRELLA_STAND.x, SIDEWALK_TOP, UMBRELLA_STAND.z);
     umbrellaGroup.rotation.x *= 0.9;
@@ -6877,52 +7110,12 @@ function updateInteractions(dt, t) {
   );
   if (openProgress >= 1) umbrellaState.open = umbrellaState.targetOpen;
   const u = clamp(umbrellaState.open, 0, 1);
-  const ribEase = smoothstep(0.0, 0.58, u);
-  const clothEase = smoothstep(0.28, 1.0, u);
-  umbrellaClosed.visible = clothEase < 0.92;
-  umbrellaClosed.scale.set(1 - 0.78 * ribEase, 1 - 0.68 * ribEase, 1 - 0.78 * ribEase);
-  umbrellaOpen.visible = clothEase > 0.02;
-  umbrellaOpen.scale.set(
-    Math.max(0.015, clothEase),
-    Math.max(0.015, clothEase * 0.9),
-    Math.max(0.015, clothEase)
-  );
-  umbrellaOpen.position.y = 1.13 - 0.015 * clothEase;
-  umbrellaTip.visible = ribEase > 0.35;
-  umbrellaTip.position.y = 1.2 + 0.06 * ribEase;
-  const ribRadius = lerp(0.035, 0.295, ribEase);
-  const ribDrop = lerp(0.55, 0.075, ribEase);
-  const hub = new THREE.Vector3(0, 1.14, 0);
-  umbrellaRibs.forEach((rib) => {
-    const end = new THREE.Vector3(
-      Math.cos(rib.angle) * ribRadius,
-      1.14 - ribDrop,
-      Math.sin(rib.angle) * ribRadius
-    );
-    setUmbrellaRod(rib.mesh, hub, end);
-  });
+  setUmbrellaBonePose(u);
+  umbrellaCanopyMesh.visible = true;
+  umbrellaTipCap.visible = true;
 
-  // automatic door (wall-clock timers so low frame rates do not hold it open)
-  if (doorState.closeAt > 0 && performance.now() >= doorState.closeAt) {
-    doorState.closeAt = 0;
-    doorState.timer = 0;
-    doorState.target = 0;
-    playDoorSlide(true);
-  }
-  if (doorState.closeAt > 0) {
-    doorState.timer = Math.max(0, (doorState.closeAt - performance.now()) / 1000);
-  }
-  doorState.cooldown = Math.max(0, doorState.cooldown - dt);
-  doorState.proximityCheck -= dt;
-  if (doorState.proximityCheck <= 0) {
-    doorState.proximityCheck = 0.4;
-    if (doorState.cooldown <= 0 && doorState.target < 0.5 &&
-        camera.position.distanceTo(doorWorldPoint) < 8.6) {
-      openDoor();
-      doorState.cooldown = 10.0;
-    }
-  }
-  doorState.open += (doorState.target - doorState.open) * Math.min(1, dt * 2.4);
+  // door: click opens, click again closes. Camera movement never triggers it.
+  doorState.open += (doorState.target - doorState.open) * Math.min(1, dt * 2.2);
   const doorOpen = clamp(doorState.open, 0, 1);
   DOOR.left.position.x = -0.62 * doorOpen;
   DOOR.right.position.x = 0.62 * doorOpen;
@@ -6977,6 +7170,16 @@ function updateInteractions(dt, t) {
   });
 
   // balloons: wind float, drag spring-back and gentle balloon-to-balloon bounce
+  balloonClusterState.time += dt;
+  balloonClusterState.sway *= Math.exp(-dt * 1.9);
+  if (balloonClusterState.sway < 0.002) {
+    balloonClusterState.sway = 0;
+    balloonPivot.rotation.x = 0;
+    balloonPivot.rotation.z = 0;
+  } else {
+    balloonPivot.rotation.z = Math.sin(balloonClusterState.time * 5.2) * 0.055 * balloonClusterState.sway;
+    balloonPivot.rotation.x = Math.cos(balloonClusterState.time * 4.2 + 0.7) * 0.032 * balloonClusterState.sway;
+  }
   balloonRecords.forEach((record) => {
     if (!record.dragActive) {
       const k = 3.6;
@@ -7198,13 +7401,29 @@ function updateInteractions(dt, t) {
     }
   }
 
-  // store-sign easter egg flash
-  shopSignState.flash = Math.max(0, shopSignState.flash - dt);
-  const neonPulse = shopSignState.flash > 0
-    ? Math.sin((1.2 - shopSignState.flash) * 24.0) * 0.5 + 0.5
-    : 0;
-  neonFlashMat.opacity = neonPulse * 0.42;
-  neonFlash.scale.set(3.6 + neonPulse * 0.4, 1.5 + neonPulse * 0.25, 1);
+  // store-sign easter egg: two and a half slow breathing rounds, then rest
+  if (shopSignState.effect > 0) {
+    const progress = (performance.now() - shopSignState.effectStart) /
+      (shopSignState.duration * 1000);
+    if (progress >= 1) {
+      shopSignState.effect = 0;
+      neonFlashMat.opacity = 0;
+      neonFlash.visible = false;
+    } else {
+      neonFlash.visible = true;
+      const envelope = smoothstep(0, 0.16, progress) * (1 - smoothstep(0.84, 1, progress));
+      const breathe = 0.5 + 0.5 * Math.sin(progress * TAU * 2.5 - Math.PI / 2);
+      const pulse = envelope * (0.18 + 0.82 * breathe);
+      const rainyGlow = weatherMix < 0.5;
+      neonFlashMat.color.setHex(rainyGlow ? 0xbdf5ff : 0xffe6bd);
+      neonFlashMat.opacity = pulse * (rainyGlow ? 0.34 : 0.11);
+      neonFlash.scale.set(
+        rainyGlow ? 4.1 + pulse * 0.7 : 3.8 + pulse * 0.25,
+        rainyGlow ? 1.65 + pulse * 0.35 : 1.35 + pulse * 0.12,
+        1
+      );
+    }
+  }
 }
 
 const interactionDebug = {
@@ -7213,6 +7432,7 @@ const interactionDebug = {
   bike: bikeState,
   bikeTrailEffects,
   bikeBasketAnchor,
+  bikeBasketFlowerGroup,
   bikeWheelGroups,
   door: doorState,
   umbrella: umbrellaState,
@@ -7222,12 +7442,17 @@ const interactionDebug = {
   ringBikeBell,
   wakeVending,
   selectBottle,
-  openDoor,
+  toggleDoor,
   togglePoster,
   takeUmbrellaOut,
   returnUmbrellaToStand,
   toggleUmbrellaOpen,
   umbrellaGroup,
+  umbrellaRibBones,
+  umbrellaCanopyMesh,
+  neonFlash,
+  neonFlashMaterial: neonFlashMat,
+  balloonClusterState,
   settleBottle,
   spreadFlower,
   releaseButterfly,
