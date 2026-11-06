@@ -16,12 +16,8 @@ body.sunny {
   display: block;
   width: 100%;
   height: 100%;
-  cursor: grab;
+  cursor: default;
   touch-action: none;
-}
-
-#scene:active {
-  cursor: grabbing;
 }
 
 /* Soft lens vignette; purely visual, no interface elements. */
@@ -86,6 +82,34 @@ body.sunny::after {
   width: 19px;
   height: 19px;
   display: block;
+}
+
+.mute-btn {
+  position: relative;
+}
+
+.mute-slash {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 22px;
+  height: 2px;
+  border-radius: 2px;
+  background: currentColor;
+  opacity: 0;
+  transform: translate(-50%, -50%) rotate(-45deg);
+  transition: opacity 0.2s ease;
+  pointer-events: none;
+}
+
+.mute-btn.is-muted {
+  color: #d68a70;
+  background: rgba(255, 244, 236, 0.9);
+}
+
+.mute-btn.is-muted .mute-slash {
+  opacity: 1;
+  background: #a84b32;
 }
 
 .weather-btn:hover {

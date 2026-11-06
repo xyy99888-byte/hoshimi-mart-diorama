@@ -629,6 +629,7 @@ const PUDDLE_TEX = canvasTexture(256, 256, (ctx, w, h) => {
   ctx.fillRect(0, 0, w, h);
 });
 
+const puddleRecords = [];
 function puddle(parent, x, z, sx, sz, rot = 0, opacity = 0.55, y = 0.044) {
   const mat = new THREE.ShaderMaterial({
     uniforms: {
@@ -668,6 +669,7 @@ function puddle(parent, x, z, sx, sz, rot = 0, opacity = 0.55, y = 0.044) {
   mesh.renderOrder = 3;
   mesh.userData.rainOnly = true;
   parent.add(mesh);
+  puddleRecords.push({ x, z, sx, sz, rot, opacity, y, parent });
   return mesh;
 }
 
@@ -1800,6 +1802,7 @@ const wetKit = kit('04-积水与倒影', 0.72, { fromY: -0.18, scaleFrom: 1.0 })
   puddle(wetKit, 0.5, 4.5, 0.8, 0.35, 0.7, 0.42);
   puddle(wetKit, 5.25, -4.35, 0.55, 0.28, 0.0, 0.4);
   puddle(wetKit, -3.3, 1.05, 0.9, 0.25, 0.35, 0.38, 0.164);
+  puddle(wetKit, -4.55, -0.65, 0.34, 0.2, 0.1, 0.5, 0.17);
   // warm shop window spill on the sidewalk — broken into reflected columns
   reflectionStrip(wetKit, 0xff8f2f, 0.58, 3.2, -4.05, 0.5, 0.5, 0, 0.169);
   reflectionStrip(wetKit, 0xffa23c, 0.5, 3.5, -3.2, 0.55, 0.42, 0, 0.169);
@@ -1817,7 +1820,8 @@ const wetKit = kit('04-积水与倒影', 0.72, { fromY: -0.18, scaleFrom: 1.0 })
   reflectionStrip(wetKit, 0x2c93b9, 0.9, 2.4, 2.65, -2.75, 0.38, 0, 0.169);
   reflectionStrip(wetKit, 0xb9557a, 0.5, 1.5, 2.6, -3.65, 0.2, 0, 0.169);
   // street lamp reflection on the road
-  reflectionStrip(wetKit, 0xffa94f, 0.5, 3.6, -3.68, 3.65, 0.34);
+  const lampRoadReflection = reflectionStrip(wetKit, 0xffa94f, 0.5, 3.6, -3.68, 3.65, 0.34);
+  lampRoadReflection.userData.lampOnly = true;
   // long wet-road columns that link the glowing shop to the street
   reflectionStrip(wetKit, 0xff8a2e, 0.55, 3.7, -3.4, 3.55, 0.25);
   reflectionStrip(wetKit, 0xff9a3d, 0.42, 4.0, -2.45, 3.6, 0.3);
@@ -1837,7 +1841,8 @@ const wetKit = kit('04-积水与倒影', 0.72, { fromY: -0.18, scaleFrom: 1.0 })
   softLightPool(wetKit, 0xffad5e, 2.9, 1.7, -3.2, 0.75, 0.055);
   softLightPool(wetKit, 0xffad5e, 3.2, 1.9, -0.9, 0.9, 0.055);
   softLightPool(wetKit, 0xffad5e, 1.6, 1.2, 0.9, 0.35, 0.045);
-  softLightPool(wetKit, 0xffa34f, 3.5, 3.5, -3.68, 1.65, 0.06, 0.172);
+  const lampPool = softLightPool(wetKit, 0xffa34f, 3.5, 3.5, -3.68, 1.65, 0.06, 0.172);
+  lampPool.userData.lampOnly = true;
   // a large foreground puddle catches the shop and the sky
   puddle(wetKit, 0.8, 4.32, 1.45, 0.5, 0.35, 0.66);
   softLightPool(wetKit, 0x7fa6c4, 1.9, 0.8, 0.8, 4.32, 0.09, 0.049);
@@ -3213,28 +3218,42 @@ const bikeKit = kit('31-自行车', 3.48, { fromY: -0.7, scaleFrom: 0.9, duratio
   const wheelY = SIDEWALK_TOP + wheelR;
   const tireGeo = new THREE.TorusGeometry(wheelR, 0.028, 8, 28);
   const wheelPositions = [[bx, wheelY, rearZ], [bx, wheelY, frontZ]];
+  const wheelGroups = [];
   wheelPositions.forEach(([x, y, z]) => {
+    const wheelGroup = new THREE.Group();
+    wheelGroup.position.set(x, y, z);
+    bikeKit.add(wheelGroup);
     const tire = new THREE.Mesh(tireGeo, M.tire);
-    tire.position.set(x, y, z);
     tire.rotation.y = Math.PI / 2;
     tire.castShadow = true;
-    bikeKit.add(tire);
+    wheelGroup.add(tire);
     const rim = new THREE.Mesh(new THREE.TorusGeometry(wheelR - 0.035, 0.011, 6, 24), M.metalLight);
-    rim.position.set(x, y, z);
     rim.rotation.y = Math.PI / 2;
-    bikeKit.add(rim);
+    wheelGroup.add(rim);
     for (let s = 0; s < 8; s++) {
       const a = (s / 8) * TAU;
       barBetween(
-        bikeKit,
+        wheelGroup,
         M.metalLight,
-        [x, y, z],
-        [x, y + Math.sin(a) * (wheelR - 0.045), z + Math.cos(a) * (wheelR - 0.045)],
+        [0, 0, 0],
+        [0, Math.sin(a) * (wheelR - 0.045), Math.cos(a) * (wheelR - 0.045)],
         0.004
       );
     }
-    cylinder(bikeKit, M.metalDark, 0.035, 0.035, 0.08, x, y, z, { seg: 8, rz: Math.PI / 2 });
+    cylinder(wheelGroup, M.metalDark, 0.035, 0.035, 0.08, 0, 0, 0, { seg: 8, rz: Math.PI / 2 });
+    wheelGroup.traverse((o) => {
+      if (o.isMesh) {
+        o.userData.noMerge = true;
+        o.castShadow = false;
+      }
+    });
+    wheelGroups.push(wheelGroup);
   });
+  bikeKit.userData.wheelGroups = wheelGroups;
+  const rearTrailAnchor = new THREE.Object3D();
+  rearTrailAnchor.position.set(bx, SIDEWALK_TOP + 0.02, rearZ);
+  bikeKit.add(rearTrailAnchor);
+  bikeKit.userData.rearTrailAnchor = rearTrailAnchor;
   const bb = [bx, wheelY - 0.02, (rearZ + frontZ) / 2];
   const seatTop = [bx, SIDEWALK_TOP + 0.93, rearZ + 0.27];
   const headTop = [bx, SIDEWALK_TOP + 0.88, frontZ - 0.08];
@@ -3305,13 +3324,40 @@ const streetKit = kit('32-门口杂物', 3.55, { fromY: -0.55, scaleFrom: 0.92 }
     { x: 1.74, color: 0x3d6b8e, mat: M.bluePlastic, icon: TEX.binPet, label: 'ペット' },
     { x: 2.06, color: 0xa64b48, mat: M.redPlastic, icon: TEX.binPaper, label: '紙' },
   ];
-  bins.forEach((b) => {
+  bins.forEach((b, binIndex) => {
     box(streetKit, b.mat, 0.27, 0.54, 0.32, b.x, SIDEWALK_TOP + 0.28, -0.58, {
       outline: 0.009,
     });
-    box(streetKit, M.metalDark, 0.28, 0.045, 0.33, b.x, SIDEWALK_TOP + 0.56, -0.58, {
-      cast: false,
-    });
+    if (binIndex < 2) {
+      box(streetKit, M.metalDark, 0.28, 0.045, 0.33, b.x, SIDEWALK_TOP + 0.56, -0.58, {
+        cast: false,
+      });
+    } else {
+      // The paper bin gets a real hinged lid and a few scraps inside.
+      box(streetKit, M.metalDark, 0.24, 0.008, 0.28, b.x, SIDEWALK_TOP + 0.554, -0.58, { cast: false });
+      const paperBits = new THREE.Group();
+      paperBits.position.set(b.x, SIDEWALK_TOP + 0.562, -0.58);
+      for (let p = 0; p < 5; p++) {
+        const bit = new THREE.Mesh(
+          new THREE.BoxGeometry(rand(0.018, 0.04), 0.012, rand(0.018, 0.04)),
+          basic(p % 2 ? 0xe9dfc9 : 0xd8c8ad)
+        );
+        bit.position.set(rand(-0.09, 0.09), rand(-0.01, 0.01), rand(-0.11, 0.11));
+        bit.rotation.y = rand(0, TAU);
+        bit.userData.noMerge = true;
+        paperBits.add(bit);
+      }
+      paperBits.traverse((o) => { o.userData.noMerge = true; });
+      streetKit.add(paperBits);
+      const lidPivot = new THREE.Group();
+      lidPivot.position.set(b.x, SIDEWALK_TOP + 0.595, -0.745);
+      const lidMesh = box(lidPivot, M.metalDark, 0.28, 0.04, 0.33, 0, 0, 0.165, { cast: false });
+      lidMesh.userData.noMerge = true;
+      lidPivot.traverse((o) => { o.userData.noMerge = true; });
+      streetKit.add(lidPivot);
+      streetKit.userData.trashLidPivot = lidPivot;
+      streetKit.userData.trashPaperBits = paperBits;
+    }
     const icon = new THREE.Mesh(
       new THREE.PlaneGeometry(0.18, 0.18),
       new THREE.MeshBasicMaterial({ map: b.icon, transparent: true })
@@ -3353,11 +3399,49 @@ const streetKit = kit('32-门口杂物', 3.55, { fromY: -0.55, scaleFrom: 0.92 }
   warning.position.set(-1.25, SIDEWALK_TOP + 0.4, -0.62);
   warning.rotation.y = 0.25;
   streetKit.add(warning);
-  // small welcome flower pot
-  cylinder(streetKit, M.cardboard, 0.14, 0.1, 0.25, 1.05, SIDEWALK_TOP + 0.13, -0.37, { seg: 12, outline: 0.01 });
+}
+
+// The little welcome pot is a separate, touchable object so petals can open
+// and a butterfly can visit it on long press.
+const flowerPot = new THREE.Group();
+flowerPot.position.set(1.05, SIDEWALK_TOP, -0.37);
+world.add(flowerPot);
+const flowerPotRecord = {
+  group: flowerPot,
+  petals: [],
+  bloom: 0,
+  bloomTarget: 0,
+  butterfly: null,
+  butterflyTime: 0,
+  butterflyActive: false,
+};
+{
+  cylinder(flowerPot, M.cardboard, 0.14, 0.1, 0.25, 0, 0.13, 0, { seg: 12, outline: 0.01 });
+  const petalMats = [toon(0xf0b5b8), toon(0xffd0d2), toon(0xf7c6df)];
   for (let i = 0; i < 3; i++) {
-    cylinder(streetKit, M.trimGreenLight, 0.006, 0.008, 0.3, 1.02 + i * 0.035, SIDEWALK_TOP + 0.38, -0.37 + rand(-0.04, 0.04), { seg: 5, cast: false, rz: rand(-0.3, 0.3) });
-    sphere(streetKit, toon(0xe8b0b4), 0.035, 1.02 + i * 0.035, SIDEWALK_TOP + 0.51, -0.37, { seg: 8, cast: false });
+    const cx = -0.03 + i * 0.035;
+    const cz = rand(-0.04, 0.04);
+    cylinder(flowerPot, M.trimGreenLight, 0.006, 0.008, 0.3, cx, 0.38, cz, { seg: 5, cast: false, rz: rand(-0.3, 0.3) });
+    const head = new THREE.Group();
+    head.position.set(cx, 0.53, cz);
+    flowerPot.add(head);
+    const petals = [];
+    for (let p = 0; p < 6; p++) {
+      const a = (p / 6) * TAU;
+      const petal = sphere(
+        head,
+        petalMats[i % petalMats.length],
+        0.024,
+        Math.cos(a) * 0.035,
+        0,
+        Math.sin(a) * 0.035,
+        { seg: 7, cast: false }
+      );
+      petal.userData.baseScale = 1;
+      petals.push(petal);
+    }
+    const heart = sphere(head, basic(0xffe08a), 0.022, 0, 0.002, 0, { seg: 7, cast: false });
+    flowerPotRecord.petals.push({ head, petals, heart });
   }
 }
 
@@ -3401,7 +3485,7 @@ const lampKit = kit('34-街灯', 3.82, { fromY: -0.95, scaleFrom: 0.92 });
   lampShade.position.set(lx, SIDEWALK_TOP + 4.42, lz + 0.9);
   lampKit.add(lampShade);
   cylinder(lampKit, M.warmLight, 0.2, 0.2, 0.04, lx, SIDEWALK_TOP + 4.22, lz + 0.9, { seg: 18, cast: false, receive: false });
-  makeGlowSprite(0xffbf7c, 2.8, lx, SIDEWALK_TOP + 4.3, lz + 0.9, 0.38, lampKit);
+  lampKit.userData.lampGlow = makeGlowSprite(0xffbf7c, 2.8, lx, SIDEWALK_TOP + 4.3, lz + 0.9, 0.38, lampKit);
   // street name plates
   const plate = new THREE.Mesh(
     new THREE.PlaneGeometry(0.82, 0.26),
@@ -3519,12 +3603,25 @@ const guardKit = kit('35-街角护栏与路牌', 3.92, { fromY: -0.55, scaleFrom
   buildGuardrail(guardKit, 5.94, 2.55, 5.94, 5.05);
   // stop sign on the near corner
   cylinder(guardKit, M.metalLight, 0.04, 0.045, 2.4, 3.02, SIDEWALK_TOP + 1.2, 1.88, { seg: 8 });
+  const signPivot = new THREE.Group();
+  signPivot.position.set(3.02, SIDEWALK_TOP + 2.2, 1.88);
+  guardKit.add(signPivot);
   const stopMat = new THREE.MeshBasicMaterial({ map: TEX.stopSign, transparent: true, side: THREE.DoubleSide });
   const stopSign = new THREE.Mesh(new THREE.PlaneGeometry(0.56, 0.56), stopMat);
-  stopSign.position.set(3.02, SIDEWALK_TOP + 2.2, 1.9);
+  stopSign.position.set(0, 0, 0.02);
   stopSign.rotation.y = 0.16;
-  guardKit.add(stopSign);
+  signPivot.add(stopSign);
   makeGlowSprite(0xff6c58, 0.55, 3.02, SIDEWALK_TOP + 2.2, 1.94, 0.08, guardKit);
+  // blue street plate under the stop sign
+  const plate = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.6, 0.165),
+    new THREE.MeshBasicMaterial({ map: TEX.streetPlateBlue, side: THREE.DoubleSide })
+  );
+  plate.position.set(0, -0.6, 0.02);
+  plate.rotation.y = 0.16;
+  signPivot.add(plate);
+  signPivot.traverse((o) => { o.userData.noMerge = true; });
+  guardKit.userData.signPivot = signPivot;
   // parking sign at the far edge of the bay, out of the vending machines' sightline
   cylinder(guardKit, M.metalLight, 0.03, 0.035, 2.1, 5.94, SIDEWALK_TOP + 1.05, -0.2, { seg: 8 });
   const parkMat = new THREE.MeshBasicMaterial({ map: TEX.parkingSign, transparent: true, side: THREE.DoubleSide });
@@ -3532,14 +3629,6 @@ const guardKit = kit('35-街角护栏与路牌', 3.92, { fromY: -0.55, scaleFrom
   parkSign.position.set(5.94, SIDEWALK_TOP + 2.0, -0.2);
   parkSign.rotation.y = Math.PI / 3;
   guardKit.add(parkSign);
-  // blue street plate under the stop sign
-  const plate = new THREE.Mesh(
-    new THREE.PlaneGeometry(0.6, 0.165),
-    new THREE.MeshBasicMaterial({ map: TEX.streetPlateBlue, side: THREE.DoubleSide })
-  );
-  plate.position.set(3.02, SIDEWALK_TOP + 1.6, 1.9);
-  plate.rotation.y = 0.16;
-  guardKit.add(plate);
   // wet road object: one lone traffic cone near the parking bay
   const cone = new THREE.Mesh(new THREE.ConeGeometry(0.15, 0.52, 14), toon(0xd96735));
   cone.position.set(5.05, 0.04 + 0.26, -0.3);
@@ -4039,7 +4128,7 @@ function updateBalloonString(record) {
 {
   const balloonColors = [0xff7e8b, 0xffd152, 0x67c8ee];
   balloonColors.forEach((color, i) => {
-    const bx = -0.22 + i * 0.2;
+    const bx = -0.3 + i * 0.3;
     const by = 0.92 + (i === 1 ? 0.2 : 0);
     const bg = new THREE.Group();
     bg.position.set(bx, by, 0.01);
@@ -4076,6 +4165,7 @@ function updateBalloonString(record) {
       returning: false,
       hit: null,
       phase: Math.random() * TAU,
+      windPhase: Math.random() * TAU,
     };
     const hit = new THREE.Mesh(new THREE.SphereGeometry(0.21, 10, 8), INVISIBLE_HIT_MAT);
     hit.layers.set(HIT_LAYER);
@@ -4133,6 +4223,64 @@ TEX.sunnyPoster = canvasTexture(512, 720, (ctx, w, h) => {
   ctx.fillStyle = '#e76c54';
   ctx.font = `800 24px ${FONT_JP}`;
   ctx.fillText('星見町内会', w / 2, 650);
+});
+
+TEX.sunnyPoster2 = canvasTexture(512, 720, (ctx, w, h) => {
+  ctx.fillStyle = '#f7efd8';
+  ctx.fillRect(0, 0, w, h);
+  ctx.fillStyle = '#2d6d55';
+  ctx.fillRect(0, 0, w, 156);
+  ctx.fillStyle = '#fff9e8';
+  ctx.font = `900 66px ${FONT_JP}`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('新商品入荷', w / 2, 82);
+  ctx.fillStyle = '#d86b3f';
+  ctx.fillRect(44, 198, w - 88, 270);
+  ctx.fillStyle = '#fff3cf';
+  ctx.beginPath(); ctx.arc(w / 2, 332, 98, 0, TAU); ctx.fill();
+  ctx.fillStyle = '#e8a54b';
+  ctx.beginPath(); ctx.arc(w / 2, 332, 74, 0, TAU); ctx.fill();
+  ctx.fillStyle = '#7b4b2a';
+  ctx.font = `800 30px ${FONT_JP}`;
+  ctx.fillText('あんバター', w / 2, 455);
+  ctx.fillStyle = '#3c7c54';
+  ctx.font = `700 23px ${FONT_JP}`;
+  ctx.fillText('HOSHIMI MART 24H', w / 2, 560);
+  ctx.fillStyle = '#7a6a4f';
+  ctx.font = `500 19px ${FONT_JP}`;
+  ctx.fillText('期間限定・なくなり次第終了', w / 2, 620);
+});
+
+TEX.sunnyPoster3 = canvasTexture(512, 720, (ctx, w, h) => {
+  ctx.fillStyle = '#e9f2e8';
+  ctx.fillRect(0, 0, w, h);
+  ctx.strokeStyle = '#6a8d72';
+  ctx.lineWidth = 4;
+  ctx.strokeRect(20, 20, w - 40, h - 40);
+  ctx.fillStyle = '#4d6b55';
+  ctx.font = `900 48px ${FONT_JP}`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('ねこを さがしています', w / 2, 92);
+  // a simple hand-drawn cat
+  ctx.fillStyle = '#d6b98f';
+  ctx.beginPath(); ctx.ellipse(w / 2, 305, 125, 105, 0, 0, TAU); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(140, 245); ctx.lineTo(162, 155); ctx.lineTo(215, 210); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(372, 245); ctx.lineTo(350, 155); ctx.lineTo(297, 210); ctx.fill();
+  ctx.fillStyle = '#4c3b2a';
+  ctx.beginPath(); ctx.arc(205, 300, 10, 0, TAU); ctx.fill();
+  ctx.beginPath(); ctx.arc(307, 300, 10, 0, TAU); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(256, 325); ctx.lineTo(238, 342); ctx.lineTo(274, 342); ctx.fill();
+  ctx.strokeStyle = '#4c3b2a';
+  ctx.lineWidth = 5;
+  ctx.beginPath(); ctx.arc(256, 345, 32, 0.1, Math.PI - 0.1); ctx.stroke();
+  ctx.fillStyle = '#526b54';
+  ctx.font = `700 25px ${FONT_JP}`;
+  ctx.fillText('茶トラ・オス・人なつこい', w / 2, 485);
+  ctx.fillStyle = '#9a543f';
+  ctx.font = `800 27px ${FONT_JP}`;
+  ctx.fillText('星見町内会 090-xxxx-xxxx', w / 2, 585);
 });
 
 TEX.glassSun = canvasTexture(512, 1024, (ctx, w, h) => {
@@ -4194,6 +4342,7 @@ const sunnyLeftPoster = texturedPlane(world, TEX.sunnyPoster, 0.46, 0.6, STORE_X
   ry: -Math.PI / 2,
 });
 const posterPlanes = [sunnyBoardPoster, sunnyLeftPoster];
+const POSTER_TEXTURES = [TEX.sunnyPoster, TEX.sunnyPoster2, TEX.sunnyPoster3];
 // small stickers on the glass
 texturedPlane(sunnyDecor, TEX.sunnySticker, 0.34, 0.34, -3.58, 1.04, -0.915, { transparent: true });
 texturedPlane(sunnyDecor, TEX.sunnySticker, 0.27, 0.27, 0.72, 1.02, -0.915, { transparent: true });
@@ -4246,6 +4395,7 @@ for (let i = 0; i < 4; i++) {
 }
 
 // Warm sunny light patches (actual shadows still do most of the work).
+const sunPatches = [];
 function sunnyPatch(x, z, w, d, opacity = 0.08, y = 0.172) {
   const mat = new THREE.ShaderMaterial({
     uniforms: {
@@ -4276,6 +4426,18 @@ function sunnyPatch(x, z, w, d, opacity = 0.08, y = 0.172) {
   mesh.position.set(x, y, z);
   mesh.renderOrder = 5;
   sunnyDecor.add(mesh);
+  sunPatches.push({
+    mesh,
+    mat,
+    baseX: x,
+    baseZ: z,
+    baseOpacity: opacity,
+    width: w,
+    depth: d,
+    flash: 0,
+    driftX: 0,
+    driftZ: 0,
+  });
   return mesh;
 }
 sunnyPatch(0.2, -0.25, 1.25, 0.7, 0.075);
@@ -4780,14 +4942,16 @@ scene.traverse((o) => {
       });
     }
   } else if (o.isSpotLight) {
-    weatherLights.push({
-      type: 'spot',
-      light: o,
-      rainIntensity: o.intensity,
-      dayIntensity: 0.035,
-      rainColor: o.color.clone(),
-      dayColor: new THREE.Color(0xffe8c0),
-    });
+    if (o.name !== 'streetLampLight') {
+      weatherLights.push({
+        type: 'spot',
+        light: o,
+        rainIntensity: o.intensity,
+        dayIntensity: 0.035,
+        rainColor: o.color.clone(),
+        dayColor: new THREE.Color(0xffe8c0),
+      });
+    }
   } else if (o.isPointLight) {
     const isDayFill = o.name === 'dayFill';
     weatherLights.push({
@@ -4843,6 +5007,10 @@ const SUN_DAY_POS = new THREE.Vector3(-8.5, 15.5, 12.0);
 function smoothMix(a, b, x) {
   const t = clamp((x - a) / (b - a), 0, 1);
   return t * t * (3 - 2 * t);
+}
+
+function smoothstep(a, b, x) {
+  return smoothMix(a, b, x);
 }
 
 function setGroundMaps(sunny) {
@@ -4996,14 +5164,33 @@ const interactionPointer = new THREE.Vector2();
 const interactionPlane = new THREE.Plane();
 const interactionPoint = new THREE.Vector3();
 
+// ------------------------------------------------------------
+// Audio: real CC0 recordings, embedded as an offline bank and decoded lazily
+// ------------------------------------------------------------
+const AUDIO_BANK = (typeof window !== 'undefined' && window.AUDIO_DATA) ? window.AUDIO_DATA : {};
+const audioCache = new Map();
+const audioLoading = new Map();
 let audioCtx = null;
+let audioMaster = null;
+let audioMuted = false;
+try {
+  audioMuted = window.localStorage.getItem('hoshimi-muted') === '1';
+} catch (e) {
+  audioMuted = false;
+}
+
 function ensureAudio() {
+  if (!AUDIO_BANK || !Object.keys(AUDIO_BANK).length) return null;
   if (!audioCtx) {
     const AudioCtor = window.AudioContext || window.webkitAudioContext;
     if (!AudioCtor) return null;
     try {
       audioCtx = new AudioCtor();
+      audioMaster = audioCtx.createGain();
+      audioMaster.gain.value = audioMuted ? 0 : 0.82;
+      audioMaster.connect(audioCtx.destination);
     } catch (e) {
+      audioCtx = null;
       return null;
     }
   }
@@ -5011,37 +5198,169 @@ function ensureAudio() {
   return audioCtx;
 }
 
-function playTone(freq, delay, duration, volume, type = 'sine') {
+function decodeBase64Audio(base64) {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes.buffer;
+}
+
+function loadSound(key) {
+  if (audioCache.has(key)) return Promise.resolve(audioCache.get(key));
+  if (audioLoading.has(key)) return audioLoading.get(key);
+  const encoded = AUDIO_BANK[key];
+  if (!encoded) return Promise.resolve(null);
   const ctx = ensureAudio();
-  if (!ctx) return;
-  const t0 = ctx.currentTime + delay;
-  const osc = ctx.createOscillator();
-  const gain = ctx.createGain();
-  osc.type = type;
-  osc.frequency.setValueAtTime(freq, t0);
-  gain.gain.setValueAtTime(0.0001, t0);
-  gain.gain.linearRampToValueAtTime(volume, t0 + 0.012);
-  gain.gain.exponentialRampToValueAtTime(0.0001, t0 + duration);
-  osc.connect(gain);
-  gain.connect(ctx.destination);
-  osc.start(t0);
-  osc.stop(t0 + duration + 0.06);
+  if (!ctx) return Promise.resolve(null);
+  const promise = new Promise((resolve, reject) => {
+    const result = ctx.decodeAudioData(decodeBase64Audio(encoded), resolve, reject);
+    if (result && result.then) result.then(resolve, reject);
+  })
+    .then((decoded) => {
+      audioCache.set(key, decoded);
+      audioLoading.delete(key);
+      return decoded;
+    })
+    .catch(() => {
+      audioLoading.delete(key);
+      return null;
+    });
+  audioLoading.set(key, promise);
+  return promise;
+}
+
+function playSound(key, opts = {}) {
+  if (audioMuted) return null;
+  const ctx = ensureAudio();
+  if (!ctx) return null;
+  const volume = opts.volume === undefined ? 0.35 : opts.volume;
+  const rate = opts.rate === undefined ? 1 : opts.rate;
+  const delay = opts.delay === undefined ? 0 : opts.delay;
+  let stopped = false;
+  let source = null;
+  let gain = null;
+  loadSound(key).then((buffer) => {
+    if (!buffer || stopped || !audioCtx) return;
+    source = audioCtx.createBufferSource();
+    source.buffer = buffer;
+    source.playbackRate.value = rate;
+    gain = audioCtx.createGain();
+    const t0 = audioCtx.currentTime + delay;
+    gain.gain.setValueAtTime(0.0001, t0);
+    gain.gain.linearRampToValueAtTime(volume, t0 + 0.025);
+    gain.gain.setValueAtTime(volume, t0 + Math.max(0.03, buffer.duration / rate - 0.08));
+    gain.gain.exponentialRampToValueAtTime(0.0001, t0 + buffer.duration / rate);
+    source.connect(gain);
+    gain.connect(audioMaster);
+    source.start(t0);
+    source.stop(t0 + buffer.duration / rate + 0.05);
+  });
+  return {
+    stop() {
+      stopped = true;
+      try { if (source) source.stop(); } catch (e) {}
+    },
+  };
+}
+
+function startSoundLoop(key, volume = 0.12, rate = 1) {
+  if (audioMuted) return null;
+  const ctx = ensureAudio();
+  if (!ctx) return null;
+  const handle = { stopped: false, source: null, gain: null };
+  loadSound(key).then((buffer) => {
+    if (!buffer || handle.stopped || !audioCtx) return;
+    const source = audioCtx.createBufferSource();
+    const gain = audioCtx.createGain();
+    source.buffer = buffer;
+    source.loop = true;
+    source.playbackRate.value = rate;
+    gain.gain.value = 0.0001;
+    source.connect(gain);
+    gain.connect(audioMaster);
+    source.start();
+    gain.gain.linearRampToValueAtTime(volume, audioCtx.currentTime + 0.6);
+    handle.source = source;
+    handle.gain = gain;
+  });
+  handle.stop = () => {
+    handle.stopped = true;
+    if (handle.gain && audioCtx) {
+      try {
+        handle.gain.gain.cancelScheduledValues(audioCtx.currentTime);
+        handle.gain.gain.linearRampToValueAtTime(0.0001, audioCtx.currentTime + 0.35);
+      } catch (e) {}
+    }
+    const source = handle.source;
+    if (source) setTimeout(() => { try { source.stop(); } catch (e) {} }, 420);
+    handle.source = null;
+  };
+  return handle;
 }
 
 function playVendingChime() {
-  // A tiny, warm two-note "ding-dong" for the vending machine.
-  playTone(1046.5, 0.0, 0.32, 0.045, 'sine');
-  playTone(1318.5, 0.12, 0.46, 0.034, 'sine');
-  playTone(1568.0, 0.24, 0.52, 0.021, 'sine');
+  playSound('vending_can', { volume: 0.48 });
+  setTimeout(() => playSound('button_click', { volume: 0.22 }), 120);
 }
 
 function playBikeBell() {
-  // High, lightly beating partials read as a small bicycle bell.
-  playTone(2349.3, 0.0, 0.42, 0.033, 'sine');
-  playTone(3136.0, 0.0, 0.3, 0.017, 'sine');
-  playTone(2637.0, 0.095, 0.45, 0.024, 'sine');
-  playTone(3520.0, 0.095, 0.34, 0.012, 'sine');
+  playSound('bell', { volume: 0.52, rate: 0.98 });
 }
+
+function playUmbrellaOpen() {
+  playSound('umbrella_open', { volume: 0.44, rate: 0.96 });
+}
+
+function playUmbrellaClose() {
+  playSound('umbrella_close', { volume: 0.4, rate: 1.0 });
+}
+
+function playDoorSlide(closing = false) {
+  playSound('door_slide', { volume: closing ? 0.34 : 0.38, rate: closing ? 0.95 : 1.0 });
+}
+
+function playTrashLid() {
+  playSound('trash_lid', { volume: 0.42 });
+}
+
+function playWaterDrop(scale = 1) {
+  playSound('water_drop', { volume: 0.24, rate: 0.9 + Math.random() * 0.25, delay: Math.random() * 0.04 });
+}
+
+function playSwitchClick() {
+  playSound('switch_click', { volume: 0.28 });
+}
+
+function playBirdChirp() {
+  playSound('bird', { volume: 0.34, rate: 1.0 });
+}
+
+function playShopChime() {
+  playSound('shop_chime', { volume: 0.3 });
+}
+
+// Mute button lives beside the weather controls.
+const muteButton = document.getElementById('btnMute');
+function syncMuteButton() {
+  if (!muteButton) return;
+  muteButton.classList.toggle('is-muted', audioMuted);
+  muteButton.setAttribute('aria-pressed', audioMuted ? 'true' : 'false');
+  muteButton.setAttribute('aria-label', audioMuted ? '取消静音' : '静音');
+  muteButton.title = audioMuted ? '取消静音' : '静音';
+}
+function setAudioMuted(muted) {
+  audioMuted = !!muted;
+  try { window.localStorage.setItem('hoshimi-muted', audioMuted ? '1' : '0'); } catch (e) {}
+  if (audioMaster && audioCtx) {
+    audioMaster.gain.cancelScheduledValues(audioCtx.currentTime);
+    audioMaster.gain.linearRampToValueAtTime(audioMuted ? 0 : 0.82, audioCtx.currentTime + 0.12);
+  }
+  syncMuteButton();
+}
+if (muteButton) {
+  muteButton.addEventListener('click', () => setAudioMuted(!audioMuted));
+}
+syncMuteButton();
 
 function isVisibleInScene(object) {
   let current = object;
@@ -5079,20 +5398,54 @@ function addHitPlane(w, h, x, y, z, parent, data, ry = 0) {
   return mesh;
 }
 
+const HIT_PRIORITY = {
+  bike: 0,
+  bikeBell: 3,
+  vending: 4,
+  vendingButton: 8,
+  bottle: 9,
+  door: 6,
+  umbrellaBody: 8,
+  umbrellaStand: 8,
+  tree: 5,
+  poster: 6,
+  balloon: 9,
+  trash: 10,
+  lamp: 7,
+  ac: 7,
+  bird: 7,
+  sign: 6,
+  flower: 9,
+  sunPatch: 8,
+  puddle: 9,
+  eave: 8,
+  shopSign: 3,
+};
+
 function findInteractionHit(event) {
   const rect = renderer.domElement.getBoundingClientRect();
   interactionPointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
   interactionPointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
   interactionRaycaster.setFromCamera(interactionPointer, camera);
   const hits = interactionRaycaster.intersectObjects(interactionHitMeshes, false);
+  let chosen = null;
   for (let i = 0; i < hits.length; i++) {
     const hit = hits[i];
     const data = hit.object.userData.interaction;
-    if (data && isVisibleInScene(hit.object)) {
-      return { object: hit.object, data, point: hit.point, distance: hit.distance };
+    if (!data || !isVisibleInScene(hit.object)) continue;
+    const priority = HIT_PRIORITY[data.type] === undefined ? 5 : HIT_PRIORITY[data.type];
+    if (!chosen) {
+      chosen = { object: hit.object, data, point: hit.point, distance: hit.distance, priority };
+      continue;
+    }
+    // Small props should win over broad keeper boxes (e.g. the bicycle) when
+    // their hit distances are close; this keeps tiny objects tap-friendly.
+    if (hit.distance < chosen.distance - 0.03 ||
+        (hit.distance <= chosen.distance + 0.45 && priority > chosen.priority)) {
+      chosen = { object: hit.object, data, point: hit.point, distance: hit.distance, priority };
     }
   }
-  return null;
+  return chosen;
 }
 
 function pointerOnHorizontalPlane(event, y) {
@@ -5172,6 +5525,9 @@ function makeDrinkBottle(color, home, machine, index) {
     hit,
     glow,
     glowMat,
+    location: 'machine',
+    dragLift: 0,
+    buttonPress: 0,
   };
   hit.userData.interaction = { type: 'bottle', bottle: record, machine };
   machine.bottles.push(record);
@@ -5192,6 +5548,7 @@ for (let i = 0; i < VENDING_Z.length; i++) {
     light: null,
     halo: null,
     frameGlow: null,
+    buttons: [],
   };
 
   const overlayMat = new THREE.MeshBasicMaterial({
@@ -5264,12 +5621,33 @@ for (let i = 0; i < VENDING_Z.length; i++) {
   bottleHome.forEach((home, bi) => {
     makeDrinkBottle(BOTTLE_COLORS[(i * 2 + bi) % BOTTLE_COLORS.length], home, machine, bi);
   });
+
+  // Two small physical selection buttons under the display.
+  [-0.16, 0.16].forEach((dz, bi) => {
+    const button = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.031, 0.031, 0.022, 12),
+      M.metalLight
+    );
+    button.rotation.z = Math.PI / 2;
+    button.position.set(2.145, 0.78, z + dz);
+    button.castShadow = false;
+    world.add(button);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.036, 0.006, 5, 12), M.metalDark);
+    ring.position.set(2.135, 0.78, z + dz);
+    ring.rotation.y = Math.PI / 2;
+    world.add(ring);
+    addHitSphere(0.08, 2.15, 0.78, z + dz, world, {
+      type: 'vendingButton', machine, index: bi, button,
+    });
+    machine.buttons.push({ mesh: button, baseX: 2.145, press: 0, index: bi });
+  });
+
   vendingInteract.push(machine);
 }
 
 function wakeVending(machine) {
   machine.litUntil = performance.now() + 3400;
-  playVendingChime();
+  playSound('button_click', { volume: 0.2, rate: 0.92 });
 }
 
 function selectBottle(bottle) {
@@ -5279,6 +5657,10 @@ function selectBottle(bottle) {
     if (previous && previous !== bottle) {
       previous.selected = false;
       previous.targetLift = 0;
+      previous.location = 'machine';
+      previous.lift = 0;
+      previous.group.position.copy(previous.home);
+      previous.group.rotation.set(0, 0, 0);
     }
   }
   if (bottle.selected) {
@@ -5289,6 +5671,8 @@ function selectBottle(bottle) {
     bottle.selected = true;
     bottle.targetLift = 1;
     machine.selected = bottle.index;
+    bottle.location = 'machine';
+    playSound('vending_can', { volume: 0.46, rate: 1.0 });
   }
 }
 
@@ -5300,7 +5684,42 @@ const bikeState = {
   target: new THREE.Vector2(0, 0),
   bellShake: 0,
   dragging: false,
+  wheelSpin: 0,
+  prevX: 0,
+  prevZ: 0,
+  trailTimer: 0,
 };
+const bikeWheelGroups = bikeKit.userData.wheelGroups || [];
+const bikeTrailEffects = [];
+const bikeTrailTex = canvasTexture(64, 128, (ctx, w, h) => {
+  ctx.clearRect(0, 0, w, h);
+  const g = ctx.createRadialGradient(w / 2, h / 2, 2, w / 2, h / 2, w / 2);
+  g.addColorStop(0, 'rgba(255,255,255,0.75)');
+  g.addColorStop(0.55, 'rgba(255,255,255,0.3)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, w, h);
+});
+function spawnBikeTrail() {
+  const anchor = bikeKit.userData.rearTrailAnchor;
+  if (!anchor) return;
+  const pos = anchor.getWorldPosition(new THREE.Vector3());
+  const mat = new THREE.MeshBasicMaterial({
+    map: bikeTrailTex,
+    color: 0x4f7f91,
+    transparent: true,
+    opacity: 0.32,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+  });
+  const decal = new THREE.Mesh(new THREE.PlaneGeometry(0.13, 0.34), mat);
+  decal.rotation.x = -Math.PI / 2;
+  decal.rotation.z = Math.random() * 0.5 - 0.25;
+  decal.position.set(pos.x, 0.172, pos.z);
+  decal.renderOrder = 4;
+  world.add(decal);
+  bikeTrailEffects.push({ mesh: decal, mat, age: 0, life: 3.2 });
+}
 const BIKE_BOUNDS = {
   xMin: 0.0,
   xMax: 0.82,
@@ -5310,6 +5729,59 @@ const BIKE_BOUNDS = {
 const bikeBell = bikeKit.userData.bell;
 const bikeBellBasePos = bikeBell ? bikeBell.position.clone() : new THREE.Vector3();
 const bikeBellBaseRot = bikeBell ? bikeBell.rotation.clone() : new THREE.Euler();
+const bikeBasketAnchor = new THREE.Object3D();
+bikeBasketAnchor.position.set(2.55, SIDEWALK_TOP + 0.895, -0.35);
+bikeKit.add(bikeBasketAnchor);
+
+function returnBottleToMachine(bottle) {
+  bottle.selected = false;
+  bottle.location = 'machine';
+  bottle.targetLift = 0;
+  bottle.lift = 0;
+  bottle.group.position.copy(bottle.home);
+  bottle.group.rotation.set(0, 0, 0);
+  bottle.machine.selected = -1;
+  playSound('button_click', { volume: 0.2, rate: 1.0 });
+}
+
+function settleBottle(bottle, point, event) {
+  const basketWorld = bikeBasketAnchor.getWorldPosition(new THREE.Vector3());
+  const bdx = point.x - basketWorld.x;
+  const bdz = point.z - basketWorld.z;
+  let basketTarget = bdx * bdx + bdz * bdz < 0.23 * 0.23;
+  if (!basketTarget && event) {
+    const projected = basketWorld.clone().project(camera);
+    const bx = (projected.x * 0.5 + 0.5) * window.innerWidth;
+    const by = (-projected.y * 0.5 + 0.5) * window.innerHeight;
+    basketTarget = Math.hypot(event.clientX - bx, event.clientY - by) < 62;
+  }
+  if (basketTarget) {
+    bottle.location = 'basket';
+    bottle.group.position.set(basketWorld.x, basketWorld.y + 0.015, basketWorld.z);
+    bottle.group.rotation.set(0, 0, 0);
+  } else if (point.z < -0.52 && point.x > -4.3 && point.x < 0.95) {
+    bottle.location = 'window';
+    bottle.group.position.set(
+      clamp(point.x, -4.2, 0.85),
+      0.52,
+      -0.78
+    );
+    bottle.group.rotation.set(0, 0, 0);
+  } else {
+    bottle.location = 'ground';
+    bottle.group.position.set(
+      clamp(point.x, -0.35, 4.4),
+      0.235,
+      clamp(point.z, -0.1, 2.85)
+    );
+    bottle.group.rotation.set(0, 0, 0);
+  }
+  bottle.selected = true;
+  bottle.targetLift = 0;
+  bottle.lift = 0;
+  bottle.machine.selected = bottle.index;
+  playSound('vending_can', { volume: 0.32, rate: 1.06 });
+}
 addHitBox(0.92, 0.9, 1.45, 2.55, 0.63, -1.0, bikeKit, { type: 'bike' });
 if (bikeBell) {
   addHitSphere(0.15, bikeBellBasePos.x, bikeBellBasePos.y, bikeBellBasePos.z, bikeKit, { type: 'bikeBell' });
@@ -5321,16 +5793,42 @@ function ringBikeBell() {
 }
 
 // ------------------------------------------------------------
-// Umbrella stand: a center umbrella that opens and closes
+// Umbrella stand: take out, unfold the ribs, open the cloth, carry, return
 // ------------------------------------------------------------
-const umbrellaState = { open: 0, target: 0 };
+const UMBRELLA_STAND = { x: -0.7, z: -0.63 };
+const UMBRELLA_OUT = { x: -0.7, z: -0.18 };
+const umbrellaState = {
+  inStand: true,
+  taking: false,
+  returning: false,
+  returnMoveStarted: false,
+  takeT: 0,
+  returnT: 0,
+  takeStartedAt: 0,
+  returnStartedAt: 0,
+  returnStartX: UMBRELLA_STAND.x,
+  returnStartZ: UMBRELLA_STAND.z,
+  open: 0,
+  targetOpen: 0,
+  openFrom: 0,
+  openStartedAt: 0,
+  autoOpenTriggered: false,
+  dragging: false,
+  dragTargetX: UMBRELLA_STAND.x,
+  dragTargetZ: UMBRELLA_STAND.z,
+  velocityX: 0,
+  velocityZ: 0,
+  tiltX: 0,
+  tiltZ: 0,
+  autoOpenRain: false,
+};
 const umbrellaGroup = new THREE.Group();
-umbrellaGroup.position.set(-0.7, SIDEWALK_TOP, -0.63);
+umbrellaGroup.position.set(UMBRELLA_STAND.x, SIDEWALK_TOP, UMBRELLA_STAND.z);
 world.add(umbrellaGroup);
-const umbrellaShaft = cylinder(umbrellaGroup, M.metalDark, 0.012, 0.012, 1.12, 0, 0.56, 0, {
+const umbrellaShaft = cylinder(umbrellaGroup, M.metalDark, 0.012, 0.012, 1.15, 0, 0.575, 0, {
   seg: 8, cast: false, receive: false,
 });
-const umbrellaHandle = barBetween(umbrellaGroup, M.metalDark, [0, 0.04, 0], [-0.1, 0.02, 0.1], 0.012);
+const umbrellaHandle = barBetween(umbrellaGroup, M.metalDark, [0, 0.04, 0], [-0.11, 0.02, 0.1], 0.012);
 umbrellaHandle.castShadow = false;
 const umbrellaClosed = new THREE.Mesh(
   new THREE.ConeGeometry(0.06, 0.55, 8, 1, true),
@@ -5340,22 +5838,82 @@ umbrellaClosed.position.y = 0.79;
 umbrellaClosed.castShadow = false;
 umbrellaGroup.add(umbrellaClosed);
 const umbrellaOpen = new THREE.Mesh(
-  new THREE.ConeGeometry(0.27, 0.16, 14, 1, true),
+  new THREE.ConeGeometry(0.3, 0.13, 16, 1, true),
   toon(0x42634f, { side: THREE.DoubleSide })
 );
-umbrellaOpen.position.y = 1.15;
+umbrellaOpen.position.y = 1.13;
 umbrellaOpen.scale.setScalar(0.01);
 umbrellaOpen.visible = false;
 umbrellaOpen.castShadow = false;
 umbrellaGroup.add(umbrellaOpen);
 const umbrellaTip = new THREE.Mesh(new THREE.SphereGeometry(0.022, 7, 5), M.metalLight);
-umbrellaTip.position.y = 1.24;
+umbrellaTip.position.y = 1.22;
 umbrellaTip.visible = false;
 umbrellaGroup.add(umbrellaTip);
-addHitBox(0.42, 1.15, 0.42, -0.7, 0.82, -0.63, world, { type: 'umbrella' });
 
-function toggleUmbrella() {
-  umbrellaState.target = umbrellaState.target > 0.5 ? 0 : 1;
+// Eight dynamic ribs, animated around the hub before the fabric expands.
+const umbrellaRibs = [];
+const umbrellaRibGeo = new THREE.CylinderGeometry(0.007, 0.007, 1, 5);
+for (let i = 0; i < 8; i++) {
+  const rib = new THREE.Mesh(umbrellaRibGeo, M.metalDark);
+  rib.castShadow = false;
+  umbrellaGroup.add(rib);
+  umbrellaRibs.push({ mesh: rib, angle: (i / 8) * TAU + Math.PI / 8 });
+}
+const umbrellaBodyHit = addHitBox(0.6, 1.3, 0.6, 0, 0.72, 0, umbrellaGroup, { type: 'umbrellaBody' });
+addHitBox(0.45, 1.15, 0.45, UMBRELLA_STAND.x, 0.82, UMBRELLA_STAND.z, world, { type: 'umbrellaStand' });
+
+function setUmbrellaRod(mesh, a, b) {
+  const dir = new THREE.Vector3().subVectors(b, a);
+  const len = Math.max(0.001, dir.length());
+  mesh.position.copy(a).addScaledVector(dir, 0.5);
+  mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize());
+  mesh.scale.set(1, len, 1);
+}
+
+function takeUmbrellaOut() {
+  if (!umbrellaState.inStand) return;
+  umbrellaState.inStand = false;
+  umbrellaState.taking = true;
+  umbrellaState.takeT = 0;
+  umbrellaState.takeStartedAt = performance.now();
+  umbrellaState.autoOpenRain = weatherMix < 0.5;
+  umbrellaState.autoOpenTriggered = false;
+  umbrellaState.targetOpen = 0;
+  umbrellaState.open = 0;
+  umbrellaState.openFrom = 0;
+  umbrellaState.openStartedAt = performance.now();
+  playUmbrellaOpen();
+}
+
+function returnUmbrellaToStand() {
+  if (umbrellaState.inStand || umbrellaState.returning) return;
+  umbrellaState.returning = true;
+  umbrellaState.returnMoveStarted = false;
+  umbrellaState.returnT = 0;
+  umbrellaState.returnStartedAt = performance.now();
+  umbrellaState.returnStartX = umbrellaGroup.position.x;
+  umbrellaState.returnStartZ = umbrellaGroup.position.z;
+  setUmbrellaOpenTarget(0, true);
+  umbrellaState.dragging = false;
+  playUmbrellaClose();
+}
+
+function setUmbrellaOpenTarget(value, silent = false) {
+  const next = value > 0.5 ? 1 : 0;
+  if (umbrellaState.targetOpen === next) return;
+  umbrellaState.openFrom = umbrellaState.open;
+  umbrellaState.openStartedAt = performance.now();
+  umbrellaState.targetOpen = next;
+  if (!silent) {
+    if (next > 0.5) playUmbrellaOpen();
+    else playUmbrellaClose();
+  }
+}
+
+function toggleUmbrellaOpen() {
+  if (umbrellaState.inStand) return;
+  setUmbrellaOpenTarget(umbrellaState.targetOpen > 0.5 ? 0 : 1, false);
 }
 
 // ------------------------------------------------------------
@@ -5378,7 +5936,9 @@ doorRevealLight.castShadow = false;
 world.add(doorRevealLight);
 
 function openDoor(resetTimer = true) {
+  const wasClosed = doorState.target < 0.5;
   doorState.target = 1;
+  if (wasClosed) playDoorSlide(false);
   if (resetTimer) {
     doorState.closeAt = performance.now() + 4800;
     doorState.timer = 4.8;
@@ -5389,14 +5949,17 @@ function openDoor(resetTimer = true) {
 // Posters: pause and enlarge ever so slightly
 // ------------------------------------------------------------
 const posterInteract = [];
-posterPlanes.forEach((poster) => {
+posterPlanes.forEach((poster, posterIndex) => {
   const record = {
     type: 'poster',
     mesh: poster,
     fit: 1,
     targetFit: 1,
     baseScale: poster.scale.clone(),
+    textureIndex: posterIndex % POSTER_TEXTURES.length,
   };
+  poster.material.map = POSTER_TEXTURES[record.textureIndex];
+  poster.material.needsUpdate = true;
   poster.userData.interaction = record;
   interactionHitMeshes.push(poster);
   const pad = new THREE.Mesh(new THREE.PlaneGeometry(0.62, 0.78), INVISIBLE_HIT_MAT);
@@ -5413,6 +5976,9 @@ posterPlanes.forEach((poster) => {
 });
 
 function togglePoster(record) {
+  record.textureIndex = (record.textureIndex + 1) % POSTER_TEXTURES.length;
+  record.mesh.material.map = POSTER_TEXTURES[record.textureIndex];
+  record.mesh.material.needsUpdate = true;
   record.targetFit = record.targetFit > 1.01 ? 1 : 1.065;
 }
 
@@ -5420,6 +5986,15 @@ function togglePoster(record) {
 // Trees: leaf swish and a soft warm halo
 // ------------------------------------------------------------
 const treeInteract = [];
+const treeBeamTex = canvasTexture(64, 256, (ctx, w, h) => {
+  ctx.clearRect(0, 0, w, h);
+  const g = ctx.createLinearGradient(0, 0, 0, h);
+  g.addColorStop(0, 'rgba(255,250,221,0)');
+  g.addColorStop(0.35, 'rgba(255,248,211,0.45)');
+  g.addColorStop(1, 'rgba(255,244,198,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(w * 0.28, 0, w * 0.44, h);
+});
 interactiveTrees.forEach((tree) => {
   const glowMat = new THREE.SpriteMaterial({
     map: RADIAL_TEX,
@@ -5484,8 +6059,45 @@ interactiveTrees.forEach((tree) => {
   patch.renderOrder = 4;
   world.add(patch);
 
+  // Sunny Tyndall shafts through the leaves.
+  const beams = [];
+  for (let b = 0; b < 3; b++) {
+    const beamMat = new THREE.MeshBasicMaterial({
+      map: treeBeamTex,
+      color: 0xfff7d5,
+      transparent: true,
+      opacity: 0,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      fog: false,
+    });
+    const beam = new THREE.Mesh(new THREE.PlaneGeometry(0.28 * tree.scale, 1.9 * tree.scale), beamMat);
+    beam.position.set(tree.x + (b - 1) * 0.24 * tree.scale, tree.base + 0.9 * tree.scale, tree.z + (b - 1) * 0.08);
+    beam.rotation.y = b * 1.7 + tree.x;
+    beam.rotation.z = (b - 1) * 0.16;
+    beam.renderOrder = 8;
+    world.add(beam);
+    beams.push({ mesh: beam, mat: beamMat });
+  }
+  // A few rain streaks fall out of the crown in the wet state.
+  const dropCount = 12;
+  const dropPositions = new Float32Array(dropCount * 2 * 3);
+  const dropSeeds = [];
+  for (let d = 0; d < dropCount; d++) {
+    const a = Math.random() * TAU;
+    const r = Math.random() * 0.5 * tree.scale;
+    dropSeeds.push({ x: tree.x + Math.cos(a) * r, z: tree.z + Math.sin(a) * r, y: tree.base + Math.random() * 1.8 });
+  }
+  const dropGeo = new THREE.BufferGeometry();
+  dropGeo.setAttribute('position', new THREE.BufferAttribute(dropPositions, 3));
+  const dropMat = new THREE.LineBasicMaterial({ color: 0xb9ddff, transparent: true, opacity: 0, depthWrite: false });
+  const rainDrops = new THREE.LineSegments(dropGeo, dropMat);
+  rainDrops.frustumCulled = false;
+  world.add(rainDrops);
+
   addHitSphere(0.7 * tree.scale, tree.x, tree.canopyY, tree.z, world, { type: 'tree', tree });
-  treeInteract.push({ tree, glow, glowMat, glints, patch, patchMat });
+  treeInteract.push({ tree, glow, glowMat, glints, patch, patchMat, beams, rainDrops, dropSeeds });
 });
 
 // ------------------------------------------------------------
@@ -5494,6 +6106,258 @@ interactiveTrees.forEach((tree) => {
 balloonRecords.forEach((record) => {
   interactionHitMeshes.push(record.hit);
 });
+
+// ------------------------------------------------------------
+// Trash bin, street lamp, AC, bird, sign, flower and weather spots
+// ------------------------------------------------------------
+const trashState = { open: 0, target: 0 };
+const trashLidPivot = streetKit.userData.trashLidPivot;
+addHitBox(0.34, 0.72, 0.42, 2.06, 0.4, -0.58, world, { type: 'trash' });
+function toggleTrash() {
+  trashState.target = trashState.target > 0.5 ? 0 : 1;
+  playTrashLid();
+}
+
+const lampState = { on: true };
+const lampGlow = lampKit.userData.lampGlow;
+const lampOnlyMeshes = [];
+scene.traverse((o) => {
+  if (o.userData && o.userData.lampOnly) {
+    lampOnlyMeshes.push({
+      mesh: o,
+      baseOpacity: o.material && o.material.uniforms && o.material.uniforms.uOpacity
+        ? o.material.uniforms.uOpacity.value
+        : 0,
+    });
+  }
+});
+addHitBox(0.7, 0.85, 0.72, -3.68, 4.3, 2.42, world, { type: 'lamp' });
+addHitBox(0.4, 2.4, 0.4, -3.68, 2.2, 1.52, world, { type: 'lamp' });
+function toggleLamp() {
+  lampState.on = !lampState.on;
+  playSwitchClick();
+}
+
+const acState = { on: false, angle: 0, audio: null };
+const acFan = new THREE.Group();
+acFan.position.set(1.492, 3.05, -3.78);
+world.add(acFan);
+for (let i = 0; i < 3; i++) {
+  const blade = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.145, 0.045), M.metalDark);
+  blade.position.y = 0.075;
+  blade.rotation.x = (i / 3) * TAU;
+  blade.castShadow = false;
+  acFan.add(blade);
+}
+const acHub = new THREE.Mesh(new THREE.SphereGeometry(0.028, 8, 6), M.metalLight);
+acHub.castShadow = false;
+acFan.add(acHub);
+addHitBox(0.32, 0.7, 0.92, 1.4, 3.05, -3.78, world, { type: 'ac' });
+function toggleAC() {
+  acState.on = !acState.on;
+  playSwitchClick();
+}
+
+const BIRD_Y = 4.98;
+const birdState = { flap: 0 };
+const birdGroup = new THREE.Group();
+birdGroup.position.set(-5.45, BIRD_Y, 1.52);
+world.add(birdGroup);
+const birdBody = new THREE.Mesh(new THREE.SphereGeometry(0.09, 9, 7), toon(0x6d6257));
+birdBody.scale.set(1.3, 0.9, 0.9);
+birdBody.castShadow = false;
+birdGroup.add(birdBody);
+const birdHead = new THREE.Mesh(new THREE.SphereGeometry(0.055, 8, 6), toon(0x7b6d5f));
+birdHead.position.set(0.085, 0.08, 0);
+birdHead.castShadow = false;
+birdGroup.add(birdHead);
+const birdBeak = new THREE.Mesh(new THREE.ConeGeometry(0.02, 0.06, 6), basic(0xe0a346));
+birdBeak.position.set(0.145, 0.075, 0);
+birdBeak.rotation.z = -Math.PI / 2;
+birdGroup.add(birdBeak);
+const birdWings = [];
+[-1, 1].forEach((side) => {
+  const pivot = new THREE.Group();
+  pivot.position.set(-0.01, 0.02, side * 0.065);
+  const wing = new THREE.Mesh(new THREE.PlaneGeometry(0.2, 0.1), toon(0x8f8171, { side: THREE.DoubleSide }));
+  wing.position.z = side * 0.075;
+  wing.rotation.y = side * 0.35;
+  wing.castShadow = false;
+  pivot.add(wing);
+  birdGroup.add(pivot);
+  birdWings.push(pivot);
+});
+addHitSphere(0.3, -5.45, BIRD_Y, 1.52, world, { type: 'bird' });
+function pokeBird() {
+  birdState.flap = 2.4;
+  playBirdChirp();
+}
+
+const signPivot = guardKit.userData.signPivot;
+const signState = { angle: 0, velocity: 0 };
+addHitBox(0.72, 0.78, 0.32, 3.02, SIDEWALK_TOP + 2.2, 1.9, world, { type: 'sign' });
+function wobbleSign() {
+  signState.velocity += 1.15;
+}
+
+const flowerPotHit = addHitBox(0.48, 0.56, 0.48, 1.05, 0.45, -0.37, world, { type: 'flower' });
+flowerPotRecord.bloomTarget = 0;
+flowerPotRecord.bloomHoldUntil = 0;
+flowerPotRecord.butterflyActive = false;
+flowerPotRecord.butterflyTime = 0;
+const butterfly = new THREE.Group();
+butterfly.visible = false;
+butterfly.scale.setScalar(1.45);
+butterfly.position.set(1.05, 0.65, -0.37);
+world.add(butterfly);
+const butterflyWings = [];
+[-1, 1].forEach((side) => {
+  const wingPivot = new THREE.Group();
+  const wing = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.14, 0.1),
+    new THREE.MeshBasicMaterial({ color: side < 0 ? 0xf4b34f : 0xffd985, transparent: true, opacity: 0.92, side: THREE.DoubleSide })
+  );
+  wing.position.x = side * 0.07;
+  wingPivot.add(wing);
+  butterfly.add(wingPivot);
+  butterflyWings.push({ pivot: wingPivot, side });
+});
+const butterflyBody = new THREE.Mesh(new THREE.CylinderGeometry(0.009, 0.012, 0.13, 5), toon(0x4a3a30));
+butterflyBody.rotation.x = Math.PI / 2;
+butterfly.add(butterflyBody);
+flowerPotRecord.butterfly = butterfly;
+flowerPotRecord.butterflyWings = butterflyWings;
+
+function spreadFlower() {
+  flowerPotRecord.bloomTarget = 1;
+  flowerPotRecord.bloomHoldUntil = performance.now() + 2400;
+}
+function releaseButterfly() {
+  if (weatherMix < 0.5 || flowerPotRecord.butterflyActive) return;
+  flowerPotRecord.butterflyActive = true;
+  flowerPotRecord.butterflyTime = 0;
+  butterfly.visible = true;
+}
+
+sunPatches.forEach((record) => {
+  addHitBox(record.width * 0.92, 0.08, record.depth * 0.92, record.baseX, 0.185, record.baseZ, sunnyDecor, {
+    type: 'sunPatch', record,
+  });
+});
+function pokeSunPatch(record) {
+  record.flash = 1;
+  record.driftX += 0.22;
+  record.driftZ += 0.14;
+}
+
+const rippleEffects = [];
+function spawnRipple(x, z, sx, sz, y = 0.18, strength = 1) {
+  const life = 2.2 + Math.random() * 0.8;
+  const mat = new THREE.MeshBasicMaterial({
+    color: 0xbfeaff,
+    transparent: true,
+    opacity: 0.32 * strength,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+  });
+  const ring = new THREE.Mesh(new THREE.RingGeometry(0.86, 1.0, 28), mat);
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.set(x, y + 0.006, z);
+  ring.scale.setScalar(0.13);
+  ring.renderOrder = 7;
+  world.add(ring);
+  rippleEffects.push({
+    mesh: ring,
+    mat,
+    age: 0,
+    life,
+    start: 0.13,
+    end: Math.max(0.3, Math.max(sx, sz) * 1.5) * strength,
+  });
+}
+
+const puddleHitMeshes = [];
+puddleRecords.forEach((record) => {
+  const hit = addHitBox(record.sx * 1.8, 0.04, record.sz * 1.8, record.x, record.y + 0.012, record.z, world, {
+    type: 'puddle', record,
+  });
+  record.hit = hit;
+  puddleHitMeshes.push(hit);
+});
+function pokePuddle(record) {
+  if (weatherMix > 0.5) return;
+  spawnRipple(record.x, record.z, record.sx, record.sz, record.y, 1);
+  spawnRipple(record.x, record.z, record.sx * 0.8, record.sz * 0.8, record.y, 0.75);
+  playWaterDrop();
+}
+
+// Eave drain: a real little spout plus a short local burst of water.
+const eaveState = { boostUntil: 0, splashTimer: 0 };
+const eaveSpout = new THREE.Group();
+eaveSpout.position.set(-4.55, 2.0, -0.72);
+world.add(eaveSpout);
+const eavePipe = cylinder(eaveSpout, M.metalDark, 0.045, 0.055, 0.72, 0, 0.36, 0, { seg: 8, cast: false });
+const eaveLip = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.055, 0.06, 8), M.metalDark);
+eaveLip.position.y = -0.36;
+eaveLip.castShadow = false;
+eaveSpout.add(eaveLip);
+const eaveHit = addHitBox(0.34, 0.86, 0.34, -4.55, 2.0, -0.72, world, { type: 'eave' });
+const eaveDropCount = 34;
+const eavePositions = new Float32Array(eaveDropCount * 2 * 3);
+const eaveSeeds = [];
+for (let i = 0; i < eaveDropCount; i++) {
+  eaveSeeds.push({
+    x: -4.55 + rand(-0.06, 0.06),
+    y: rand(0.3, 1.7),
+    z: -0.72 + rand(-0.05, 0.05),
+    speed: rand(2.5, 4.2),
+  });
+}
+const eaveGeo = new THREE.BufferGeometry();
+eaveGeo.setAttribute('position', new THREE.BufferAttribute(eavePositions, 3));
+const eaveStream = new THREE.LineSegments(
+  eaveGeo,
+  new THREE.LineBasicMaterial({ color: 0xc5e9ff, transparent: true, opacity: 0.72, depthWrite: false })
+);
+eaveStream.frustumCulled = false;
+eaveStream.visible = false;
+world.add(eaveStream);
+function pokeEave() {
+  if (weatherMix > 0.5) return;
+  eaveState.boostUntil = performance.now() + 4200;
+  eaveState.splashTimer = 0;
+  playWaterDrop();
+}
+
+// Store sign easter egg: three quick taps flash the interior neon.
+const shopSignState = { clicks: [], flash: 0 };
+addHitBox(5.35, 0.78, 0.3, STORE_CX, 3.1, -0.7, world, { type: 'shopSign' });
+const neonFlashMat = new THREE.SpriteMaterial({
+  map: RADIAL_TEX,
+  color: 0xb9fff2,
+  transparent: true,
+  opacity: 0,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false,
+  depthTest: true,
+  fog: false,
+});
+const neonFlash = new THREE.Sprite(neonFlashMat);
+neonFlash.position.set(0.2, 2.9, -0.55);
+neonFlash.scale.set(3.6, 1.5, 1);
+neonFlash.renderOrder = 12;
+world.add(neonFlash);
+function pokeShopSign() {
+  const now = performance.now();
+  shopSignState.clicks = shopSignState.clicks.filter((t) => now - t < 1250);
+  shopSignState.clicks.push(now);
+  if (shopSignState.clicks.length >= 3) {
+    shopSignState.clicks = [];
+    shopSignState.flash = 1.2;
+    playShopChime();
+  }
+}
 
 // ------------------------------------------------------------
 // Pointer gestures
@@ -5539,21 +6403,69 @@ function finishGesture() {
     bikeState.dragging = false;
     if (!gesture.moved && gesture.hit.data.type === 'bikeBell') ringBikeBell();
   }
+  if (gesture.kind === 'umbrella') {
+    umbrellaState.dragging = false;
+    if (!gesture.moved) {
+      toggleUmbrellaOpen();
+    } else {
+      const dist = Math.hypot(
+        umbrellaGroup.position.x - UMBRELLA_STAND.x,
+        umbrellaGroup.position.z - UMBRELLA_STAND.z
+      );
+      if (dist < 0.62) returnUmbrellaToStand();
+    }
+  }
+  if (gesture.kind === 'bottle') {
+    const bottle = gesture.bottle;
+    if (gesture.dragging) {
+      settleBottle(bottle, bottle.group.position, gesture.lastEvent);
+    } else {
+      returnBottleToMachine(bottle);
+    }
+  }
+  if (gesture.kind === 'flower' && !gesture.moved) {
+    spreadFlower();
+  }
   if (gesture.kind === 'tap' && !gesture.moved) {
     const data = gesture.hit.data;
     if (data.type === 'vending') {
+      wakeVending(data.machine);
+    } else if (data.type === 'vendingButton') {
+      data.machine.buttons[data.index].press = 1;
       wakeVending(data.machine);
     } else if (data.type === 'bottle') {
       wakeVending(data.machine);
       selectBottle(data.bottle);
     } else if (data.type === 'door') {
       openDoor();
-    } else if (data.type === 'umbrella') {
-      toggleUmbrella();
+    } else if (data.type === 'umbrellaStand') {
+      if (umbrellaState.inStand) takeUmbrellaOut();
+      else returnUmbrellaToStand();
+    } else if (data.type === 'umbrellaBody') {
+      if (umbrellaState.inStand) takeUmbrellaOut();
+      else toggleUmbrellaOpen();
     } else if (data.type === 'tree') {
       data.tree.swing = 1.25;
     } else if (data.type === 'poster') {
       togglePoster(data.record || data);
+    } else if (data.type === 'trash') {
+      toggleTrash();
+    } else if (data.type === 'lamp') {
+      toggleLamp();
+    } else if (data.type === 'ac') {
+      toggleAC();
+    } else if (data.type === 'bird') {
+      pokeBird();
+    } else if (data.type === 'sign') {
+      wobbleSign();
+    } else if (data.type === 'sunPatch') {
+      pokeSunPatch(data.record);
+    } else if (data.type === 'puddle') {
+      pokePuddle(data.record);
+    } else if (data.type === 'eave') {
+      pokeEave();
+    } else if (data.type === 'shopSign') {
+      pokeShopSign();
     }
   }
   controls.enabled = true;
@@ -5574,6 +6486,10 @@ function cancelGesture() {
   if (gesture.kind === 'balloon') {
     gesture.record.dragActive = false;
     gesture.record.returning = true;
+  } else if (gesture.kind === 'umbrella') {
+    umbrellaState.dragging = false;
+  } else if (gesture.kind === 'bottle' && gesture.dragging) {
+    settleBottle(gesture.bottle, gesture.bottle.group.position, gesture.lastEvent);
   }
   activeGesture = null;
   controls.enabled = true;
@@ -5606,7 +6522,39 @@ function onPointerDown(event) {
     // ignore
   }
 
-  if (hit.data.type === 'bike' || hit.data.type === 'bikeBell') {
+  if (hit.data.type === 'umbrellaBody' && !umbrellaState.inStand) {
+    activeGesture = {
+      kind: 'umbrella',
+      pointerId,
+      hit,
+      startX: x,
+      startY: y,
+      moved: false,
+      lastEvent: event,
+      dragging: false,
+      startPoint: pointerOnHorizontalPlane(event, SIDEWALK_TOP + 0.02),
+      startOffsetX: umbrellaGroup.position.x,
+      startOffsetZ: umbrellaGroup.position.z,
+    };
+    controls.enabled = false;
+    renderer.domElement.style.cursor = 'grabbing';
+  } else if (hit.data.type === 'bottle' &&
+             (hit.data.bottle.selected || hit.data.bottle.location !== 'machine')) {
+    activeGesture = {
+      kind: 'bottle',
+      pointerId,
+      hit,
+      bottle: hit.data.bottle,
+      startX: x,
+      startY: y,
+      moved: false,
+      lastEvent: event,
+      dragging: false,
+      lastPoint: null,
+    };
+    controls.enabled = false;
+    renderer.domElement.style.cursor = 'grabbing';
+  } else if (hit.data.type === 'bike' || hit.data.type === 'bikeBell') {
     const point = pointerOnHorizontalPlane(event, SIDEWALK_TOP + 0.02);
     activeGesture = {
       kind: 'bike',
@@ -5621,6 +6569,24 @@ function onPointerDown(event) {
     bikeState.dragging = false;
     controls.enabled = false;
     renderer.domElement.style.cursor = 'grabbing';
+  } else if (hit.data.type === 'flower') {
+    const gesture = {
+      kind: 'flower',
+      pointerId,
+      hit,
+      startX: x,
+      startY: y,
+      moved: false,
+      long: false,
+      holdTimer: null,
+    };
+    gesture.holdTimer = setTimeout(() => {
+      if (activeGesture === gesture && !gesture.moved) {
+        gesture.long = true;
+        releaseButterfly();
+      }
+    }, 520);
+    activeGesture = gesture;
   } else if (hit.data.type === 'balloon') {
     const gesture = {
       kind: 'balloon',
@@ -5691,6 +6657,40 @@ function onPointerMove(event) {
     bikeState.target.x = clamp(nx, BIKE_BOUNDS.xMin, BIKE_BOUNDS.xMax);
     bikeState.target.y = clamp(nz, BIKE_BOUNDS.zMin, BIKE_BOUNDS.zMax);
     event.preventDefault();
+  } else if (gesture.kind === 'umbrella') {
+    if (!gesture.moved) return;
+    if (!umbrellaState.dragging) {
+      umbrellaState.dragging = true;
+      gesture.dragging = true;
+    }
+    const point = pointerOnHorizontalPlane(event, SIDEWALK_TOP + 0.05);
+    if (!point || !gesture.startPoint) return;
+    umbrellaState.dragTargetX = clamp(
+      gesture.startOffsetX + point.x - gesture.startPoint.x,
+      -4.2, 4.4
+    );
+    umbrellaState.dragTargetZ = clamp(
+      gesture.startOffsetZ + point.z - gesture.startPoint.z,
+      -0.2, 2.2
+    );
+    event.preventDefault();
+  } else if (gesture.kind === 'bottle') {
+    if (!gesture.moved) return;
+    if (!gesture.dragging) {
+      gesture.dragging = true;
+      gesture.bottle.location = 'dragging';
+      gesture.bottle.selected = true;
+      gesture.bottle.targetLift = 0;
+    }
+    const point = pointerOnHorizontalPlane(event, 0.58);
+    if (!point) return;
+    gesture.bottle.group.position.set(
+      clamp(point.x, -4.5, 4.5),
+      0.58,
+      clamp(point.z, -0.3, 3.0)
+    );
+    gesture.bottle.group.rotation.set(0, 0, 0);
+    event.preventDefault();
   } else if (gesture.kind === 'balloon' && gesture.dragging) {
     const point = pointerOnHorizontalPlane(event, gesture.planeY);
     if (!point) return;
@@ -5727,7 +6727,8 @@ renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
 // Gentle per-frame interaction update
 // ------------------------------------------------------------
 function updateInteractions(dt, t) {
-  // vending lights and floating bottles
+  // vending lights, physical buttons and floating / carried drinks
+  const basketWorld = bikeBasketAnchor.getWorldPosition(new THREE.Vector3());
   vendingInteract.forEach((machine) => {
     const targetGlow = performance.now() < machine.litUntil ? 1 : 0;
     machine.glow += (targetGlow - machine.glow) * Math.min(1, dt * 3.4);
@@ -5735,17 +6736,28 @@ function updateInteractions(dt, t) {
     machine.halo.material.opacity = machine.glow * 0.12;
     machine.frameGlow.material.opacity = machine.glow * 0.4;
     machine.light.intensity = machine.glow * (weatherMix > 0.5 ? 0.55 : 0.95);
+    machine.buttons.forEach((button) => {
+      button.press *= Math.exp(-dt * 12);
+      button.mesh.position.x = button.baseX - 0.018 * Math.min(1, button.press);
+    });
     machine.bottles.forEach((bottle) => {
-      bottle.lift += (bottle.targetLift - bottle.lift) * Math.min(1, dt * 2.6);
-      const lift = bottle.lift;
-      bottle.group.position.set(
-        bottle.home.x + 0.08 * lift,
-        bottle.home.y + 0.12 * lift + Math.sin(t * 2.1 + bottle.phase) * 0.006 * lift,
-        bottle.home.z
-      );
-      bottle.group.rotation.z = Math.sin(t * 1.7 + bottle.phase) * 0.055 * lift;
-      bottle.glowMat.opacity = lift * 0.42;
-      bottle.glow.scale.setScalar(0.26 + 0.03 * Math.sin(t * 2.4 + bottle.phase));
+      bottle.glowMat.opacity = 0;
+      if (bottle.location === 'machine') {
+        bottle.lift += (bottle.targetLift - bottle.lift) * Math.min(1, dt * 2.6);
+        const lift = bottle.lift;
+        bottle.group.position.set(
+          bottle.home.x + 0.08 * lift,
+          bottle.home.y + 0.12 * lift + Math.sin(t * 2.1 + bottle.phase) * 0.006 * lift,
+          bottle.home.z
+        );
+        bottle.group.rotation.z = Math.sin(t * 1.7 + bottle.phase) * 0.055 * lift;
+        bottle.glowMat.opacity = lift * 0.42;
+        bottle.glow.scale.setScalar(0.26 + 0.03 * Math.sin(t * 2.4 + bottle.phase));
+      } else if (bottle.location === 'basket') {
+        bottle.lift = 1;
+        bottle.group.position.set(basketWorld.x, basketWorld.y + 0.015, basketWorld.z);
+        bottle.group.rotation.set(0, 0, 0);
+      }
     });
   });
 
@@ -5755,6 +6767,22 @@ function updateInteractions(dt, t) {
   bikeState.current.y += (bikeState.target.y - bikeState.current.y) * ease;
   bikeKit.position.x = bikeState.current.x;
   bikeKit.position.z = bikeState.current.y;
+  const bikeDX = bikeKit.position.x - bikeState.prevX;
+  const bikeDZ = bikeKit.position.z - bikeState.prevZ;
+  const bikeDist = Math.hypot(bikeDX, bikeDZ);
+  if (bikeDist > 0.0001) {
+    bikeState.wheelSpin -= (bikeDZ >= 0 ? 1 : -1) * (bikeDist / 0.31);
+    bikeWheelGroups.forEach((wheel) => { wheel.rotation.x = bikeState.wheelSpin; });
+    if (bikeState.dragging && weatherMix < 0.5 && bikeDist > 0.002) {
+      bikeState.trailTimer -= dt;
+      if (bikeState.trailTimer <= 0) {
+        bikeState.trailTimer = 0.12;
+        spawnBikeTrail();
+      }
+    }
+  }
+  bikeState.prevX = bikeKit.position.x;
+  bikeState.prevZ = bikeKit.position.z;
   balloonPivot.position.x = balloonHome.x + bikeState.current.x;
   balloonPivot.position.z = balloonHome.z + bikeState.current.y;
 
@@ -5769,23 +6797,117 @@ function updateInteractions(dt, t) {
     bikeBell.position.x = bikeBellBasePos.x;
   }
 
-  // umbrella opening
-  umbrellaState.open += (umbrellaState.target - umbrellaState.open) * Math.min(1, dt * 3.0);
+  // umbrella: take out / return / drag / layered rib-to-cloth opening
+  if (umbrellaState.taking) {
+    umbrellaState.takeT = clamp((performance.now() - umbrellaState.takeStartedAt) / 950, 0, 1);
+    const k = easeInOutCubic(umbrellaState.takeT);
+    umbrellaGroup.position.x = lerp(UMBRELLA_STAND.x, UMBRELLA_OUT.x, k);
+    umbrellaGroup.position.z = lerp(UMBRELLA_STAND.z, UMBRELLA_OUT.z, k);
+    umbrellaGroup.position.y = SIDEWALK_TOP + Math.sin(k * Math.PI) * 0.14;
+    if (umbrellaState.takeT > 0.55 && umbrellaState.autoOpenRain && !umbrellaState.autoOpenTriggered) {
+      umbrellaState.autoOpenTriggered = true;
+      setUmbrellaOpenTarget(1, true);
+    }
+    if (umbrellaState.takeT >= 1) {
+      umbrellaState.taking = false;
+      umbrellaGroup.position.set(UMBRELLA_OUT.x, SIDEWALK_TOP, UMBRELLA_OUT.z);
+      umbrellaState.dragTargetX = UMBRELLA_OUT.x;
+      umbrellaState.dragTargetZ = UMBRELLA_OUT.z;
+    }
+  } else if (umbrellaState.returning) {
+    umbrellaState.targetOpen = 0;
+    if (!umbrellaState.returnMoveStarted) {
+      // First fold the cloth and gather the ribs while still on the ground.
+      umbrellaGroup.position.y = SIDEWALK_TOP;
+      if (umbrellaState.open < 0.08) {
+        umbrellaState.returnMoveStarted = true;
+        umbrellaState.returnStartedAt = performance.now();
+        umbrellaState.returnStartX = umbrellaGroup.position.x;
+        umbrellaState.returnStartZ = umbrellaGroup.position.z;
+      }
+    } else {
+      umbrellaState.returnT = clamp((performance.now() - umbrellaState.returnStartedAt) / 800, 0, 1);
+      const k = easeInOutCubic(umbrellaState.returnT);
+      umbrellaGroup.position.x = lerp(umbrellaState.returnStartX, UMBRELLA_STAND.x, k);
+      umbrellaGroup.position.z = lerp(umbrellaState.returnStartZ, UMBRELLA_STAND.z, k);
+      umbrellaGroup.position.y = SIDEWALK_TOP + Math.sin(k * Math.PI) * 0.07;
+      if (umbrellaState.returnT >= 1) {
+        umbrellaState.returning = false;
+        umbrellaState.returnMoveStarted = false;
+        umbrellaState.inStand = true;
+        umbrellaState.open = 0;
+        umbrellaState.targetOpen = 0;
+        umbrellaState.dragging = false;
+        umbrellaGroup.position.set(UMBRELLA_STAND.x, SIDEWALK_TOP, UMBRELLA_STAND.z);
+        umbrellaGroup.rotation.set(0, 0, 0);
+      }
+    }
+  } else if (!umbrellaState.inStand) {
+    const prevX = umbrellaGroup.position.x;
+    const prevZ = umbrellaGroup.position.z;
+    const follow = Math.min(1, dt * 5.0);
+    umbrellaGroup.position.x += (umbrellaState.dragTargetX - umbrellaGroup.position.x) * follow;
+    umbrellaGroup.position.z += (umbrellaState.dragTargetZ - umbrellaGroup.position.z) * follow;
+    umbrellaGroup.position.y = SIDEWALK_TOP;
+    const vx = (umbrellaGroup.position.x - prevX) / Math.max(0.001, dt);
+    const vz = (umbrellaGroup.position.z - prevZ) / Math.max(0.001, dt);
+    umbrellaState.velocityX += (vx - umbrellaState.velocityX) * Math.min(1, dt * 8);
+    umbrellaState.velocityZ += (vz - umbrellaState.velocityZ) * Math.min(1, dt * 8);
+    if (!umbrellaState.dragging) {
+      umbrellaState.dragTargetX = clamp(umbrellaState.dragTargetX, -4.2, 4.4);
+      umbrellaState.dragTargetZ = clamp(umbrellaState.dragTargetZ, -0.25, 2.2);
+    }
+    const targetTiltZ = clamp(-umbrellaState.velocityX * 0.14, -0.2, 0.2);
+    const targetTiltX = clamp(umbrellaState.velocityZ * 0.14, -0.2, 0.2);
+    umbrellaState.tiltZ += (targetTiltZ - umbrellaState.tiltZ) * Math.min(1, dt * 4.0);
+    umbrellaState.tiltX += (targetTiltX - umbrellaState.tiltX) * Math.min(1, dt * 4.0);
+    umbrellaGroup.rotation.z = umbrellaState.tiltZ;
+    umbrellaGroup.rotation.x = umbrellaState.tiltX;
+  } else {
+    umbrellaGroup.position.set(UMBRELLA_STAND.x, SIDEWALK_TOP, UMBRELLA_STAND.z);
+    umbrellaGroup.rotation.x *= 0.9;
+    umbrellaGroup.rotation.z *= 0.9;
+  }
+
+  const openProgress = clamp((performance.now() - umbrellaState.openStartedAt) / 1600, 0, 1);
+  umbrellaState.open = lerp(
+    umbrellaState.openFrom,
+    umbrellaState.targetOpen,
+    easeInOutCubic(openProgress)
+  );
+  if (openProgress >= 1) umbrellaState.open = umbrellaState.targetOpen;
   const u = clamp(umbrellaState.open, 0, 1);
-  const ue = easeOutCubic(u);
-  umbrellaGroup.position.y = SIDEWALK_TOP + 0.055 * ue;
-  umbrellaClosed.visible = ue < 0.92;
-  umbrellaClosed.scale.set(1 - 0.72 * ue, 1 - 0.62 * ue, 1 - 0.72 * ue);
-  umbrellaOpen.visible = ue > 0.02;
-  umbrellaTip.visible = ue > 0.3;
-  umbrellaOpen.scale.setScalar(Math.max(0.015, ue));
-  umbrellaTip.position.y = 1.16 + 0.08 * ue;
+  const ribEase = smoothstep(0.0, 0.58, u);
+  const clothEase = smoothstep(0.28, 1.0, u);
+  umbrellaClosed.visible = clothEase < 0.92;
+  umbrellaClosed.scale.set(1 - 0.78 * ribEase, 1 - 0.68 * ribEase, 1 - 0.78 * ribEase);
+  umbrellaOpen.visible = clothEase > 0.02;
+  umbrellaOpen.scale.set(
+    Math.max(0.015, clothEase),
+    Math.max(0.015, clothEase * 0.9),
+    Math.max(0.015, clothEase)
+  );
+  umbrellaOpen.position.y = 1.13 - 0.015 * clothEase;
+  umbrellaTip.visible = ribEase > 0.35;
+  umbrellaTip.position.y = 1.2 + 0.06 * ribEase;
+  const ribRadius = lerp(0.035, 0.295, ribEase);
+  const ribDrop = lerp(0.55, 0.075, ribEase);
+  const hub = new THREE.Vector3(0, 1.14, 0);
+  umbrellaRibs.forEach((rib) => {
+    const end = new THREE.Vector3(
+      Math.cos(rib.angle) * ribRadius,
+      1.14 - ribDrop,
+      Math.sin(rib.angle) * ribRadius
+    );
+    setUmbrellaRod(rib.mesh, hub, end);
+  });
 
   // automatic door (wall-clock timers so low frame rates do not hold it open)
   if (doorState.closeAt > 0 && performance.now() >= doorState.closeAt) {
     doorState.closeAt = 0;
     doorState.timer = 0;
     doorState.target = 0;
+    playDoorSlide(true);
   }
   if (doorState.closeAt > 0) {
     doorState.timer = Math.max(0, (doorState.closeAt - performance.now()) / 1000);
@@ -5807,23 +6929,44 @@ function updateInteractions(dt, t) {
   doorRevealLight.intensity = doorOpen * (weatherMix * 0.55 + (1 - weatherMix) * 0.18);
 
   // tree crowns and soft halos
-  treeInteract.forEach(({ tree, glow, glowMat, glints, patch, patchMat }) => {
+  treeInteract.forEach(({ tree, glow, glowMat, glints, patch, patchMat, beams, rainDrops, dropSeeds }) => {
     tree.swing *= Math.exp(-dt * 1.15);
     const swing = tree.swing;
+    const sunnyAmount = weatherMix;
+    const wetAmount = 1 - weatherMix;
     tree.leaves.forEach((leaf) => {
       leaf.mesh.rotation.z = leaf.baseZ + Math.sin(t * 1.05 + leaf.phase) * 0.006 +
         Math.sin(t * 4.1 + leaf.phase * 1.7) * 0.035 * swing;
       leaf.mesh.rotation.x = leaf.baseX + Math.cos(t * 0.9 + leaf.phase) * 0.004 +
         Math.cos(t * 3.7 + leaf.phase) * 0.026 * swing;
     });
-    glowMat.opacity = 0.34 * swing;
+    glowMat.opacity = 0.34 * swing * sunnyAmount;
     glow.scale.setScalar(tree.glowBase * 1.8 * (1 + 0.035 * Math.sin(t * 2.0 + tree.x)));
     glints.forEach((glint, i) => {
-      glint.material.opacity = swing * (0.26 + 0.1 * Math.sin(t * 2.2 + i * 1.7));
+      glint.material.opacity = swing * sunnyAmount * (0.26 + 0.1 * Math.sin(t * 2.2 + i * 1.7));
       glint.position.y = tree.canopyY + (i - 2) * 0.055 * tree.scale +
         Math.sin(t * 1.4 + i) * 0.025 * tree.scale * swing;
     });
-    patchMat.opacity = 0.2 * swing;
+    beams.forEach((beam, i) => {
+      beam.mat.opacity = swing * sunnyAmount * (0.22 + i * 0.035);
+    });
+    rainDrops.material.opacity = swing * wetAmount * 0.75;
+    if (swing * wetAmount > 0.02) {
+      const pos = rainDrops.geometry.attributes.position;
+      dropSeeds.forEach((seed, i) => {
+        seed.y -= dt * (2.2 + (i % 3) * 0.4);
+        if (seed.y < tree.base + 0.08) seed.y = tree.canopyY + 0.1 + Math.random() * 0.6;
+        const k = i * 6;
+        pos.array[k] = seed.x;
+        pos.array[k + 1] = seed.y;
+        pos.array[k + 2] = seed.z;
+        pos.array[k + 3] = seed.x + 0.015;
+        pos.array[k + 4] = seed.y - 0.18;
+        pos.array[k + 5] = seed.z;
+      });
+      pos.needsUpdate = true;
+    }
+    patchMat.opacity = 0.2 * swing * sunnyAmount;
     patch.scale.setScalar(1 + 0.04 * Math.sin(t * 1.8 + tree.z));
   });
 
@@ -5833,11 +6976,11 @@ function updateInteractions(dt, t) {
     poster.mesh.scale.copy(poster.baseScale).multiplyScalar(poster.fit);
   });
 
-  // balloons: slow spring back to their home positions
+  // balloons: wind float, drag spring-back and gentle balloon-to-balloon bounce
   balloonRecords.forEach((record) => {
     if (!record.dragActive) {
-      const k = 4.2;
-      const damping = 2.5;
+      const k = 3.6;
+      const damping = 2.2;
       record.velocity.x += (-record.offset.x * k - record.velocity.x * damping) * dt;
       record.velocity.z += (-record.offset.z * k - record.velocity.z * damping) * dt;
       record.offset.x += record.velocity.x * dt;
@@ -5853,21 +6996,224 @@ function updateInteractions(dt, t) {
     }
     record.bobT += dt;
     record.bob *= Math.exp(-dt * 0.7);
-    const bobY = Math.sin(record.bobT * 3.2) * 0.05 * record.bob;
+    const bobY = Math.sin(record.bobT * 3.2) * 0.05 * record.bob +
+      Math.sin(t * 0.58 + record.windPhase) * 0.025;
+    const windX = Math.sin(t * 0.24 + record.windPhase) * 0.02;
+    const windZ = Math.cos(t * 0.19 + record.windPhase * 1.3) * 0.018;
     record.group.position.set(
-      record.base.x + record.offset.x,
+      record.base.x + record.offset.x + windX,
       record.base.y + bobY,
-      record.base.z + record.offset.z
+      record.base.z + record.offset.z + windZ
     );
     record.group.rotation.z = Math.sin(t * 1.1 + record.phase) * 0.035 + record.offset.x * 0.18;
+  });
+  for (let i = 0; i < balloonRecords.length; i++) {
+    for (let j = i + 1; j < balloonRecords.length; j++) {
+      const a = balloonRecords[i];
+      const b = balloonRecords[j];
+      const dx = a.group.position.x - b.group.position.x;
+      const dz = a.group.position.z - b.group.position.z;
+      const dist = Math.hypot(dx, dz);
+      const minDist = 0.27;
+      if (dist > 0.0001 && dist < minDist) {
+        const push = (minDist - dist) * 0.5;
+        const nx = dx / dist;
+        const nz = dz / dist;
+        a.offset.x = clamp(a.offset.x + nx * push, -0.6, 0.6);
+        a.offset.z = clamp(a.offset.z + nz * push, -0.46, 0.46);
+        b.offset.x = clamp(b.offset.x - nx * push, -0.6, 0.6);
+        b.offset.z = clamp(b.offset.z - nz * push, -0.46, 0.46);
+        a.velocity.x += nx * 0.06;
+        a.velocity.z += nz * 0.06;
+        b.velocity.x -= nx * 0.06;
+        b.velocity.z -= nz * 0.06;
+      }
+    }
+  }
+  balloonRecords.forEach((record) => {
+    record.group.position.x = record.base.x + record.offset.x +
+      Math.sin(t * 0.24 + record.windPhase) * 0.02;
+    record.group.position.z = record.base.z + record.offset.z +
+      Math.cos(t * 0.19 + record.windPhase * 1.3) * 0.018;
     updateBalloonString(record);
   });
+
+  // trash lid
+  trashState.open += (trashState.target - trashState.open) * Math.min(1, dt * 5.0);
+  if (trashLidPivot) trashLidPivot.rotation.x = -1.12 * clamp(trashState.open, 0, 1);
+
+  // street lamp: weak in daylight, warm and reflective at night
+  const lampWeather = weatherMix > 0.5 ? 0.08 : 1.0;
+  const lampLevel = lampState.on ? lampWeather : 0;
+  streetLight.intensity = 2.1 * lampLevel;
+  if (lampGlow) {
+    lampGlow.visible = lampState.on;
+    lampGlow.material.opacity = lampState.on ? (weatherMix > 0.5 ? 0.055 : 0.38) : 0;
+  }
+  lampOnlyMeshes.forEach(({ mesh, baseOpacity }) => {
+    const uniforms = mesh.material && mesh.material.uniforms;
+    if (uniforms && uniforms.uOpacity) uniforms.uOpacity.value = baseOpacity * lampLevel;
+    mesh.visible = lampState.on && weatherMix < 0.5;
+  });
+
+  // AC fan and lazy ambient loop
+  if (acState.on) acState.angle += dt * 2.1;
+  acFan.rotation.x = acState.angle;
+  if (acState.on && !audioMuted && !acState.audio) {
+    acState.audio = startSoundLoop('ac_hum', 0.11, 0.9);
+  } else if ((!acState.on || audioMuted) && acState.audio) {
+    acState.audio.stop();
+    acState.audio = null;
+  }
+
+  // perched bird
+  if (birdState.flap > 0) {
+    birdState.flap = Math.max(0, birdState.flap - dt);
+    const active = clamp(birdState.flap / 2.4, 0, 1);
+    birdWings.forEach((pivot, i) => {
+      pivot.rotation.z = (i === 0 ? 1 : -1) * (0.18 + Math.sin(t * 24.0) * 0.72) * active;
+    });
+    birdGroup.position.y = BIRD_Y + Math.sin(t * 16.0) * 0.008 * active;
+  } else {
+    birdWings.forEach((pivot) => { pivot.rotation.z *= 0.9; });
+    birdGroup.position.y = BIRD_Y;
+  }
+
+  // stop sign sways in the wind
+  signState.velocity += (-signState.angle * 14.0 - signState.velocity * 3.0) * dt;
+  signState.angle = clamp(signState.angle + signState.velocity * dt, -0.24, 0.24);
+  if (signPivot) signPivot.rotation.z = signState.angle;
+
+  // flower petals and the sunny butterfly
+  if (flowerPotRecord.bloomHoldUntil && performance.now() > flowerPotRecord.bloomHoldUntil) {
+    flowerPotRecord.bloomTarget = 0;
+    flowerPotRecord.bloomHoldUntil = 0;
+  }
+  flowerPotRecord.bloom += (flowerPotRecord.bloomTarget - flowerPotRecord.bloom) * Math.min(1, dt * 3.2);
+  flowerPotRecord.petals.forEach(({ head, petals, heart }, fi) => {
+    petals.forEach((petal, pi) => {
+      const s = 1 + flowerPotRecord.bloom * (0.2 + 0.035 * Math.sin(t * 2.2 + pi));
+      petal.scale.setScalar(s);
+    });
+    head.rotation.z = Math.sin(t * 1.2 + fi) * 0.018 + flowerPotRecord.bloom * 0.08;
+    heart.scale.setScalar(1 + flowerPotRecord.bloom * 0.18);
+  });
+  if (flowerPotRecord.butterflyActive) {
+    flowerPotRecord.butterflyTime += dt;
+    const p = flowerPotRecord.butterflyTime / 8.0;
+    if (weatherMix < 0.5 || p >= 1) {
+      flowerPotRecord.butterflyActive = false;
+      butterfly.visible = false;
+    } else {
+      butterfly.visible = true;
+      const orbit = Math.min(1, p / 0.18) * (1 - smoothstep(0.82, 1.0, p));
+      const angle = flowerPotRecord.butterflyTime * 1.5;
+      const radius = 0.36 + 0.1 * Math.sin(flowerPotRecord.butterflyTime * 0.7);
+      const ground = flowerPotRecord.butterflyTime * 0.12;
+      butterfly.position.set(
+        1.05 + Math.cos(angle) * radius,
+        0.62 + Math.sin(angle * 0.8) * 0.14 + ground * 0.08,
+        -0.37 + Math.sin(angle) * radius
+      );
+      butterfly.position.y = lerp(0.62, 0.62 + Math.sin(Math.PI * Math.min(1, p)) * 0.32, orbit);
+      const land = smoothstep(0.84, 1.0, p);
+      if (land > 0) {
+        butterfly.position.lerp(new THREE.Vector3(1.05, 0.63, -0.37), land);
+      }
+      flowerPotRecord.butterflyWings.forEach(({ pivot, side }, i) => {
+        pivot.rotation.z = side * (0.25 + Math.sin(t * 22.0 + i) * 0.75 * (0.4 + orbit));
+      });
+    }
+  }
+
+  // cloud-shifted sun patches
+  sunPatches.forEach((patch, pi) => {
+    patch.flash *= Math.exp(-dt * 2.2);
+    patch.driftX *= Math.exp(-dt * 0.08);
+    patch.driftZ *= Math.exp(-dt * 0.08);
+    const cloudX = Math.sin(t * 0.07 + pi) * 0.045;
+    const cloudZ = Math.cos(t * 0.052 + pi * 1.7) * 0.035;
+    patch.mesh.position.x = patch.baseX + cloudX + patch.driftX;
+    patch.mesh.position.z = patch.baseZ + cloudZ + patch.driftZ;
+    patch.mat.uniforms.uOpacity.value = patch.baseOpacity * (1 + patch.flash * 0.9);
+  });
+
+  // puddles and their stacked ripples
+  const rainy = weatherMix < 0.5;
+  const eaveActive = rainy && performance.now() < eaveState.boostUntil;
+  const baseRainOpacity = 1 - smoothMix(0.02, 0.72, weatherMix);
+  if (rainy) {
+    rainMaterial.uniforms.uOpacity.value = Math.min(1, baseRainOpacity * (1 + (eaveActive ? 0.28 : 0)));
+  }
+  puddleHitMeshes.forEach((hit) => { hit.visible = rainy; });
+  eaveHit.visible = rainy;
+  eaveStream.visible = eaveActive;
+  if (eaveStream.visible) {
+    eaveState.splashTimer -= dt;
+    if (eaveState.splashTimer <= 0) {
+      eaveState.splashTimer = 0.28;
+      spawnRipple(-4.55, -0.65, 0.34, 0.2, 0.17, 0.65);
+    }
+    const pos = eaveStream.geometry.attributes.position;
+    eaveSeeds.forEach((seed, i) => {
+      seed.y -= dt * seed.speed;
+      if (seed.y < 0.19) seed.y = 1.72 + Math.random() * 0.25;
+      const k = i * 6;
+      pos.array[k] = seed.x;
+      pos.array[k + 1] = seed.y;
+      pos.array[k + 2] = seed.z;
+      pos.array[k + 3] = seed.x + 0.012;
+      pos.array[k + 4] = seed.y - 0.23;
+      pos.array[k + 5] = seed.z;
+    });
+    pos.needsUpdate = true;
+  }
+  for (let i = rippleEffects.length - 1; i >= 0; i--) {
+    const r = rippleEffects[i];
+    r.age += dt;
+    const p = clamp(r.age / r.life, 0, 1);
+    const s = lerp(r.start, r.end, easeOutCubic(p));
+    r.mesh.scale.setScalar(s);
+    r.mat.opacity = 0.32 * (1 - p) * (1 - p);
+    r.mesh.visible = rainy;
+    if (p >= 1) {
+      world.remove(r.mesh);
+      r.mesh.geometry.dispose();
+      r.mat.dispose();
+      rippleEffects.splice(i, 1);
+    }
+  }
+
+  for (let i = bikeTrailEffects.length - 1; i >= 0; i--) {
+    const tdecal = bikeTrailEffects[i];
+    tdecal.age += dt;
+    const p = clamp(tdecal.age / tdecal.life, 0, 1);
+    tdecal.mat.opacity = 0.32 * (1 - p) * (1 - p);
+    tdecal.mesh.visible = rainy;
+    if (p >= 1) {
+      world.remove(tdecal.mesh);
+      tdecal.mesh.geometry.dispose();
+      tdecal.mat.dispose();
+      bikeTrailEffects.splice(i, 1);
+    }
+  }
+
+  // store-sign easter egg flash
+  shopSignState.flash = Math.max(0, shopSignState.flash - dt);
+  const neonPulse = shopSignState.flash > 0
+    ? Math.sin((1.2 - shopSignState.flash) * 24.0) * 0.5 + 0.5
+    : 0;
+  neonFlashMat.opacity = neonPulse * 0.42;
+  neonFlash.scale.set(3.6 + neonPulse * 0.4, 1.5 + neonPulse * 0.25, 1);
 }
 
 const interactionDebug = {
   hitMeshes: interactionHitMeshes,
   vending: vendingInteract,
   bike: bikeState,
+  bikeTrailEffects,
+  bikeBasketAnchor,
+  bikeWheelGroups,
   door: doorState,
   umbrella: umbrellaState,
   trees: treeInteract,
@@ -5877,8 +7223,45 @@ const interactionDebug = {
   wakeVending,
   selectBottle,
   openDoor,
-  toggleUmbrella,
   togglePoster,
+  takeUmbrellaOut,
+  returnUmbrellaToStand,
+  toggleUmbrellaOpen,
+  umbrellaGroup,
+  settleBottle,
+  spreadFlower,
+  releaseButterfly,
+  toggleTrash,
+  toggleLamp,
+  toggleAC,
+  pokeBird,
+  wobbleSign,
+  pokeSunPatch,
+  pokePuddle,
+  pokeEave,
+  pokeShopSign,
+  trash: trashState,
+  lamp: lampState,
+  ac: acState,
+  bird: birdState,
+  sign: signState,
+  flower: flowerPotRecord,
+  sunPatches,
+  puddles: puddleRecords,
+  ripples: rippleEffects,
+  eave: eaveState,
+  shopSign: shopSignState,
+  setAudioMuted,
+  audioMuted: () => audioMuted,
+  audioState: () => ({
+    state: audioCtx ? audioCtx.state : null,
+    muted: audioMuted,
+    decoded: Array.from(audioCache.keys()),
+  }),
+  debugHitAt: (x, y) => {
+    const hit = findInteractionHit({ clientX: x, clientY: y });
+    return hit ? { type: hit.data.type, distance: hit.distance } : null;
+  },
 };
 
 

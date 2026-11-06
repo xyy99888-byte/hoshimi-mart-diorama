@@ -1,0 +1,86 @@
+[
+  {
+    "key": "bell",
+    "file": "audio/bell.mp3",
+    "sample_rate": 48000,
+    "duration": 1.45,
+    "bytes": 11904
+  },
+  {
+    "key": "umbrella_open",
+    "file": "audio/umbrella_open.mp3",
+    "sample_rate": 44100,
+    "duration": 1.9,
+    "bytes": 15464
+  },
+  {
+    "key": "umbrella_close",
+    "file": "audio/umbrella_close.mp3",
+    "sample_rate": 48000,
+    "duration": 2.3,
+    "bytes": 18624
+  },
+  {
+    "key": "vending_can",
+    "file": "audio/vending_can.mp3",
+    "sample_rate": 48000,
+    "duration": 1.9,
+    "bytes": 15552
+  },
+  {
+    "key": "button_click",
+    "file": "audio/button_click.mp3",
+    "sample_rate": 44100,
+    "duration": 0.299,
+    "bytes": 2716
+  },
+  {
+    "key": "door_slide",
+    "file": "audio/door_slide.mp3",
+    "sample_rate": 48000,
+    "duration": 2.8,
+    "bytes": 22656
+  },
+  {
+    "key": "trash_lid",
+    "file": "audio/trash_lid.mp3",
+    "sample_rate": 48000,
+    "duration": 2.45,
+    "bytes": 19968
+  },
+  {
+    "key": "water_drop",
+    "file": "audio/water_drop.mp3",
+    "sample_rate": 44100,
+    "duration": 0.38,
+    "bytes": 3343
+  },
+  {
+    "key": "ac_hum",
+    "file": "audio/ac_hum.mp3",
+    "sample_rate": 44100,
+    "duration": 4.0,
+    "bytes": 32391
+  },
+  {
+    "key": "bird",
+    "file": "audio/bird.mp3",
+    "sample_rate": 48000,
+    "duration": 1.9,
+    "bytes": 15552
+  },
+  {
+    "key": "shop_chime",
+    "file": "audio/shop_chime.mp3",
+    "sample_rate": 44100,
+    "duration": 2.8,
+    "bytes": 22778
+  },
+  {
+    "key": "switch_click",
+    "file": "audio/switch_click.mp3",
+    "sample_rate": 44100,
+    "duration": 0.62,
+    "bytes": 5224
+  }
+]

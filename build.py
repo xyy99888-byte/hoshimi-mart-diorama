@@ -7,6 +7,7 @@ OUT = ROOT / 'index.html'
 
 CSS = (ROOT / 'src' / 'style.css').read_text(encoding='utf-8')
 MAIN = (ROOT / 'src' / 'main.js').read_text(encoding='utf-8')
+AUDIO = (ROOT / 'src' / 'audio-data.js').read_text(encoding='utf-8')
 VENDORS = [
     'three.min.js',
     'CopyShader.js',
@@ -22,6 +23,7 @@ scripts = []
 for name in VENDORS:
     source = (ROOT / 'vendor' / name).read_text(encoding='utf-8')
     scripts.append(f'<script>\n/* {name} */\n{source}\n</script>')
+scripts.append(f'<script>\n/* offline audio bank */\n{AUDIO}\n</script>')
 
 html = f'''<!DOCTYPE html>
 <html lang="zh-CN">
@@ -48,6 +50,13 @@ html = f'''<!DOCTYPE html>
         <path d="M7.2 15.6a4.1 4.1 0 0 1 .6-8.1A5.6 5.6 0 0 1 18.5 9a3.4 3.4 0 0 1 .6 6.6"></path>
         <path d="M7.7 18.4 6.9 21M11.8 18.4l-.8 2.6M15.9 18.4l-.8 2.6"></path>
       </svg>
+    </button>
+    <button class="weather-btn mute-btn" id="btnMute" type="button" aria-label="静音" aria-pressed="false" title="静音">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4.5 9.5h3l4.2-3.2v11.4l-4.2-3.2h-3z"></path>
+        <path class="sound-wave" d="M15.2 9.2a4.2 4.2 0 0 1 0 5.6M17.8 6.8a7.4 7.4 0 0 1 0 10.4"></path>
+      </svg>
+      <span class="mute-slash"></span>
     </button>
   </div>
 {chr(10).join(scripts)}

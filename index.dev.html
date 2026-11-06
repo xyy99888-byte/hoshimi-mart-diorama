@@ -22,6 +22,13 @@
         <path d="M7.7 18.4 6.9 21M11.8 18.4l-.8 2.6M15.9 18.4l-.8 2.6"></path>
       </svg>
     </button>
+    <button class="weather-btn mute-btn" id="btnMute" type="button" aria-label="静音" aria-pressed="false" title="静音">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4.5 9.5h3l4.2-3.2v11.4l-4.2-3.2h-3z"></path>
+        <path class="sound-wave" d="M15.2 9.2a4.2 4.2 0 0 1 0 5.6M17.8 6.8a7.4 7.4 0 0 1 0 10.4"></path>
+      </svg>
+      <span class="mute-slash"></span>
+    </button>
   </div>
   <script src="vendor/three.min.js"></script>
   <script src="vendor/CopyShader.js"></script>
@@ -31,6 +38,7 @@
   <script src="vendor/ShaderPass.js"></script>
   <script src="vendor/UnrealBloomPass.js"></script>
   <script src="vendor/OrbitControls.js"></script>
+  <script src="src/audio-data.js"></script>
   <script src="src/main.js"></script>
 </body>
 </html>
