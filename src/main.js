@@ -3370,26 +3370,8 @@ const streetKit = kit('32-门口杂物', 3.55, { fromY: -0.55, scaleFrom: 0.92 }
   // umbrella stand beside the door
   cylinder(streetKit, M.metalDark, 0.2, 0.22, 0.44, -0.7, SIDEWALK_TOP + 0.23, -0.63, { seg: 16, outline: 0.01 });
   cylinder(streetKit, M.metalLight, 0.19, 0.19, 0.02, -0.7, SIDEWALK_TOP + 0.43, -0.63, { seg: 16, cast: false });
-  const umbrellaColors = [0x244766, 0xa84742, 0xc7a44e, 0x42634f, 0x6d5a85];
-  umbrellaColors.forEach((c, i) => {
-    const a = (i / umbrellaColors.length) * TAU + 0.2;
-    const bx = -0.7 + Math.cos(a) * 0.075;
-    const bz = -0.63 + Math.sin(a) * 0.075;
-    const leanX = Math.cos(a) * 0.11;
-    const leanZ = Math.sin(a) * 0.11;
-    barBetween(streetKit, M.metalDark, [bx, SIDEWALK_TOP + 0.3, bz], [bx + leanX, SIDEWALK_TOP + 1.02, bz + leanZ], 0.013);
-    const canopy = new THREE.Mesh(
-      new THREE.ConeGeometry(0.068, 0.62, 9, 1, true),
-      toon(c, { side: THREE.DoubleSide })
-    );
-    canopy.position.set(bx + leanX * 0.6, SIDEWALK_TOP + 0.75, bz + leanZ * 0.6);
-    canopy.rotation.z = -leanX * 1.6;
-    canopy.rotation.x = leanZ * 1.6;
-    canopy.castShadow = true;
-    streetKit.add(canopy);
-    // J-shaped handle peeking out of the stand
-    cylinder(streetKit, M.metalDark, 0.018, 0.018, 0.12, bx + leanX, SIDEWALK_TOP + 1.05, bz + leanZ, { seg: 6, cast: false, rz: 0.5 });
-  });
+  // The five actual umbrellas are built below as identical skinned rigs so
+  // every one in the stand shares the same proportions and skeleton.
   // wet floor sign near door
   const warningTex = TEX.caution;
   const warning = new THREE.Mesh(
@@ -5421,7 +5403,7 @@ const HIT_PRIORITY = {
   bottle: 9,
   door: 6,
   umbrellaBody: 8,
-  umbrellaStand: 12,
+  umbrellaStand: 7,
   tree: 5,
   poster: 6,
   balloon: 9,
@@ -5815,46 +5797,20 @@ function ringBikeBell() {
 // ------------------------------------------------------------
 const UMBRELLA_STAND = { x: -0.7, z: -0.63 };
 const UMBRELLA_OUT = { x: -1.25, z: 0.02 };
-const umbrellaState = {
-  inStand: true,
-  taking: false,
-  returning: false,
-  returnMoveStarted: false,
-  takeT: 0,
-  returnT: 0,
-  takeStartedAt: 0,
-  returnStartedAt: 0,
-  returnStartX: UMBRELLA_STAND.x,
-  returnStartZ: UMBRELLA_STAND.z,
-  open: 0,
-  targetOpen: 0,
-  openFrom: 0,
-  openStartedAt: 0,
-  autoOpenTriggered: false,
-  dragging: false,
-  dragTargetX: UMBRELLA_STAND.x,
-  dragTargetZ: UMBRELLA_STAND.z,
-  velocityX: 0,
-  velocityZ: 0,
-  tiltX: 0,
-  tiltZ: 0,
-  autoOpenRain: false,
-};
-const umbrellaGroup = new THREE.Group();
-umbrellaGroup.position.set(UMBRELLA_STAND.x, SIDEWALK_TOP, UMBRELLA_STAND.z);
-world.add(umbrellaGroup);
-
-// A long-handled Japanese vinyl umbrella. The canopy is skinned to eight rib
-// bones, so the cloth can only move where the ribs move.
-const UMBRELLA_HUB_Y = 1.24;
-const UMBRELLA_RIM_RADIUS = 0.38;
-const UMBRELLA_RIM_DROP = 0.105;
+// Standard Japanese long umbrella proportions learned from 60 cm / 8-rib
+// long-umbrella references. Every rig in the stand shares this same geometry.
+const UMBRELLA_HUB_Y = 1.05;
+const UMBRELLA_RIM_RADIUS = 0.5;
+const UMBRELLA_RIM_DROP = 0.12;
 const UMBRELLA_RIB_COUNT = 8;
 const UMBRELLA_RIB_LENGTH = Math.hypot(UMBRELLA_RIM_RADIUS, UMBRELLA_RIM_DROP);
+const UMBRELLA_CANOPY_RINGS = 6;
+const UMBRELLA_CANOPY_SEGMENTS = 32;
+const UMBRELLA_SLOT_COUNT = 5;
 const UMBRELLA_UP = new THREE.Vector3(0, 1, 0);
-const umbrellaShaft = cylinder(umbrellaGroup, M.metalDark, 0.012, 0.012, 1.19, 0, 0.675, 0, {
-  seg: 8, cast: false, receive: false,
-});
+
+// Shared geometry/materials: five umbrellas have the exact same canopy
+// diameter, rim shape, rib count and appearance.
 const umbrellaHandleCurve = new THREE.CatmullRomCurve3([
   new THREE.Vector3(0, 0.09, 0),
   new THREE.Vector3(0, 0.035, 0),
@@ -5862,72 +5818,66 @@ const umbrellaHandleCurve = new THREE.CatmullRomCurve3([
   new THREE.Vector3(0.085, 0.06, 0.12),
   new THREE.Vector3(0.135, 0.12, 0.145),
 ]);
-const umbrellaHandle = new THREE.Mesh(
-  new THREE.TubeGeometry(umbrellaHandleCurve, 16, 0.014, 7, false),
-  M.metalDark
-);
-umbrellaHandle.castShadow = false;
-umbrellaGroup.add(umbrellaHandle);
-const umbrellaHubCap = new THREE.Mesh(new THREE.SphereGeometry(0.032, 9, 7), M.metalDark);
-umbrellaHubCap.scale.set(1, 0.65, 1);
-umbrellaHubCap.position.y = UMBRELLA_HUB_Y;
-umbrellaHubCap.castShadow = false;
-umbrellaGroup.add(umbrellaHubCap);
-const umbrellaTipCap = new THREE.Mesh(new THREE.ConeGeometry(0.019, 0.11, 7), M.metalLight);
-umbrellaTipCap.position.y = UMBRELLA_HUB_Y + 0.085;
-umbrellaTipCap.castShadow = false;
-umbrellaGroup.add(umbrellaTipCap);
-const umbrellaRunner = new THREE.Mesh(new THREE.TorusGeometry(0.026, 0.007, 6, 12), M.metalLight);
-umbrellaRunner.rotation.x = Math.PI / 2;
-umbrellaRunner.position.y = 0.92;
-umbrellaRunner.castShadow = false;
-umbrellaGroup.add(umbrellaRunner);
+const umbrellaHandleGeometry = new THREE.TubeGeometry(umbrellaHandleCurve, 16, 0.014, 7, false);
+const umbrellaRibGeometry = new THREE.CylinderGeometry(0.004, 0.0065, UMBRELLA_RIB_LENGTH, 5);
+const umbrellaRibTipGeometry = new THREE.SphereGeometry(0.01, 6, 5);
+const umbrellaHubGeometry = new THREE.SphereGeometry(0.032, 9, 7);
+const umbrellaTipGeometry = new THREE.ConeGeometry(0.019, 0.11, 7);
+const umbrellaRunnerGeometry = new THREE.TorusGeometry(0.026, 0.007, 6, 12);
+const umbrellaStrapGeometry = new THREE.TorusGeometry(0.047, 0.0065, 5, 14);
+const umbrellaBuckleGeometry = new THREE.BoxGeometry(0.024, 0.032, 0.017);
+const umbrellaStrapMaterial = toon(0xcbbf9d, { side: THREE.DoubleSide });
+const umbrellaBuckleMaterial = basic(0x6f5c45);
 
-// Root bone keeps the canopy centre and hub together; the eight rib bones
-// each own one edge of the fabric.
-const umbrellaRootBone = new THREE.Bone();
-umbrellaRootBone.name = 'umbrella-root';
-umbrellaRootBone.position.set(0, UMBRELLA_HUB_Y, 0);
-umbrellaGroup.add(umbrellaRootBone);
-const umbrellaRibBones = [];
-const umbrellaRibMeshes = [];
-for (let i = 0; i < UMBRELLA_RIB_COUNT; i++) {
-  const angle = (i / UMBRELLA_RIB_COUNT) * TAU;
-  const openDir = new THREE.Vector3(
-    Math.cos(angle) * UMBRELLA_RIM_RADIUS,
-    -UMBRELLA_RIM_DROP,
-    Math.sin(angle) * UMBRELLA_RIM_RADIUS
-  ).normalize();
-  const closedDir = new THREE.Vector3(
-    Math.cos(angle) * 0.018,
-    -0.4,
-    Math.sin(angle) * 0.018
-  ).normalize();
-  const bone = new THREE.Bone();
-  bone.name = 'umbrella-rib-' + i;
-  bone.position.set(0, UMBRELLA_HUB_Y, 0);
-  bone.quaternion.setFromUnitVectors(UMBRELLA_UP, openDir);
-  umbrellaGroup.add(bone);
-  const ribMesh = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.004, 0.0065, UMBRELLA_RIB_LENGTH, 5),
-    M.metalDark
-  );
-  ribMesh.position.y = UMBRELLA_RIB_LENGTH * 0.5;
-  ribMesh.castShadow = false;
-  bone.add(ribMesh);
-  const tipMesh = new THREE.Mesh(new THREE.SphereGeometry(0.01, 6, 5), M.metalLight);
-  tipMesh.position.y = UMBRELLA_RIB_LENGTH;
-  tipMesh.castShadow = false;
-  bone.add(tipMesh);
-  umbrellaRibBones.push({ bone, openDir, closedDir });
-  umbrellaRibMeshes.push(ribMesh);
+// A neat wrapped-fabric sleeve hides the folded skin while the umbrella is
+// closed, so every closed umbrella reads as a slim body with a tied strap.
+const umbrellaWrapPositions = [];
+const umbrellaWrapIndices = [];
+{
+  const rings = 6;
+  const segments = 16;
+  for (let ring = 0; ring <= rings; ring++) {
+    const t = ring / rings;
+    const y = lerp(0.56, UMBRELLA_HUB_Y - 0.02, t);
+    for (let s = 0; s < segments; s++) {
+      const angle = (s / segments) * TAU;
+      const fold = 1 + 0.11 * Math.cos(8 * angle);
+      const radius = lerp(0.02, 0.052, t) * fold;
+      umbrellaWrapPositions.push(Math.cos(angle) * radius, y, Math.sin(angle) * radius);
+    }
+  }
+  for (let ring = 0; ring < rings; ring++) {
+    const aStart = ring * segments;
+    const bStart = (ring + 1) * segments;
+    for (let s = 0; s < segments; s++) {
+      const next = (s + 1) % segments;
+      umbrellaWrapIndices.push(aStart + s, bStart + s, aStart + next);
+      umbrellaWrapIndices.push(bStart + s, bStart + next, aStart + next);
+    }
+  }
+  // Close both ends so the tapered sleeve reads as wrapped cloth rather than
+  // an open tube when seen from above.
+  const bottomCenter = umbrellaWrapPositions.length / 3;
+  umbrellaWrapPositions.push(0, 0.56, 0);
+  const topCenter = umbrellaWrapPositions.length / 3;
+  umbrellaWrapPositions.push(0, UMBRELLA_HUB_Y - 0.02, 0);
+  const topStart = rings * segments;
+  for (let s = 0; s < segments; s++) {
+    const next = (s + 1) % segments;
+    umbrellaWrapIndices.push(bottomCenter, s, next);
+    umbrellaWrapIndices.push(topCenter, topStart + next, topStart + s);
+  }
 }
+const umbrellaWrapGeometry = new THREE.BufferGeometry();
+umbrellaWrapGeometry.setAttribute('position', new THREE.Float32BufferAttribute(umbrellaWrapPositions, 3));
+umbrellaWrapGeometry.setIndex(umbrellaWrapIndices);
+umbrellaWrapGeometry.computeVertexNormals();
+const umbrellaWrapMaterial = new THREE.MeshToonMaterial({
+  color: 0x2d4942,
+  gradientMap: TOON_RAMP,
+  side: THREE.DoubleSide,
+});
 
-// Canopy geometry: one centre vertex bound to the root, then 32 angular
-// segments weighted between the two neighbouring rib bones. Vertices on a
-// rib are weighted 100% to that rib, so the fabric edge stays exactly on it.
-const UMBRELLA_CANOPY_RINGS = 6;
-const UMBRELLA_CANOPY_SEGMENTS = 32;
 const umbrellaCanopyPositions = [];
 const umbrellaCanopyColors = [];
 const umbrellaCanopyUvs = [];
@@ -5954,11 +5904,7 @@ const umbrellaCanopyIndices = [];
       const next = (base + 1) % UMBRELLA_RIB_COUNT;
       const w0 = frac < 1e-5 ? 1 : 1 - frac;
       const w1 = frac < 1e-5 ? 0 : frac;
-      umbrellaCanopyPositions.push(
-        Math.cos(angle) * radius,
-        y,
-        Math.sin(angle) * radius
-      );
+      umbrellaCanopyPositions.push(Math.cos(angle) * radius, y, Math.sin(angle) * radius);
       const color = ring === UMBRELLA_CANOPY_RINGS ? rim : dark;
       umbrellaCanopyColors.push(color.r, color.g, color.b);
       umbrellaCanopyUvs.push(s / UMBRELLA_CANOPY_SEGMENTS, t);
@@ -5966,13 +5912,11 @@ const umbrellaCanopyIndices = [];
       umbrellaCanopySkinWeights.push(w0, w1, 0, 0);
     }
   }
-  // Centre fan to the first ring.
   const firstRing = 1;
   for (let s = 0; s < UMBRELLA_CANOPY_SEGMENTS; s++) {
     const next = (s + 1) % UMBRELLA_CANOPY_SEGMENTS;
     umbrellaCanopyIndices.push(0, firstRing + s, firstRing + next);
   }
-  // Quads between rings.
   for (let ring = 1; ring < UMBRELLA_CANOPY_RINGS; ring++) {
     const aStart = 1 + (ring - 1) * UMBRELLA_CANOPY_SEGMENTS;
     const bStart = 1 + ring * UMBRELLA_CANOPY_SEGMENTS;
@@ -5998,21 +5942,7 @@ const umbrellaCanopyMaterial = new THREE.MeshToonMaterial({
   side: THREE.DoubleSide,
   skinning: true,
 });
-const umbrellaCanopyMesh = new THREE.SkinnedMesh(umbrellaCanopyGeometry, umbrellaCanopyMaterial);
-umbrellaCanopyMesh.castShadow = false;
-umbrellaCanopyMesh.receiveShadow = false;
-umbrellaCanopyMesh.frustumCulled = false;
-umbrellaGroup.add(umbrellaCanopyMesh);
-umbrellaGroup.updateMatrixWorld(true);
-const umbrellaSkeleton = new THREE.Skeleton([
-  ...umbrellaRibBones.map((r) => r.bone),
-  umbrellaRootBone,
-]);
-umbrellaCanopyMesh.bind(umbrellaSkeleton);
 
-// Thin dark rib seams on the canopy top, bound 100% to the matching rib bone.
-// They make the fabric-to-rib attachment readable from above while staying
-// part of the same skeleton.
 const umbrellaSeamPositions = [];
 const umbrellaSeamSkinIndices = [];
 const umbrellaSeamSkinWeights = [];
@@ -6044,32 +5974,216 @@ umbrellaSeamGeometry.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(u
 umbrellaSeamGeometry.setAttribute('skinWeight', new THREE.Float32BufferAttribute(umbrellaSeamSkinWeights, 4));
 umbrellaSeamGeometry.setIndex(umbrellaSeamIndices);
 umbrellaSeamGeometry.computeVertexNormals();
-const umbrellaSeamMesh = new THREE.SkinnedMesh(
-  umbrellaSeamGeometry,
-  new THREE.MeshToonMaterial({
-    color: 0x263d38,
-    gradientMap: TOON_RAMP,
-    side: THREE.DoubleSide,
-    skinning: true,
-  })
-);
-umbrellaSeamMesh.castShadow = false;
-umbrellaSeamMesh.frustumCulled = false;
-umbrellaGroup.add(umbrellaSeamMesh);
-umbrellaSeamMesh.bind(umbrellaSkeleton);
+const umbrellaSeamMaterial = new THREE.MeshToonMaterial({
+  color: 0x263d38,
+  gradientMap: TOON_RAMP,
+  side: THREE.DoubleSide,
+  skinning: true,
+});
 
-function setUmbrellaBonePose(value) {
+function createUmbrellaState(slot) {
+  return {
+    inStand: true,
+    taking: false,
+    returning: false,
+    returnMoveStarted: false,
+    takeT: 0,
+    returnT: 0,
+    takeStartedAt: 0,
+    returnStartedAt: 0,
+    returnStartX: slot.x,
+    returnStartZ: slot.z,
+    standX: slot.x,
+    standZ: slot.z,
+    standTiltX: slot.tiltX,
+    standTiltZ: slot.tiltZ,
+    standRotY: slot.rotY,
+    open: 0,
+    targetOpen: 0,
+    openFrom: 0,
+    openStartedAt: 0,
+    autoOpenTriggered: false,
+    dragging: false,
+    dragTargetX: slot.x,
+    dragTargetZ: slot.z,
+    velocityX: 0,
+    velocityZ: 0,
+    tiltX: 0,
+    tiltZ: 0,
+    autoOpenRain: false,
+  };
+}
+
+function setUmbrellaBonePoseForRig(rig, value) {
   const e = clamp(value, 0, 1);
   const dir = new THREE.Vector3();
-  umbrellaRibBones.forEach(({ bone, openDir, closedDir }) => {
+  rig.ribBones.forEach(({ bone, openDir, closedDir }) => {
     dir.lerpVectors(closedDir, openDir, e).normalize();
     bone.quaternion.setFromUnitVectors(UMBRELLA_UP, dir);
   });
-  umbrellaRunner.position.y = lerp(0.88, 1.165, easeInOutCubic(e));
+  rig.runner.position.y = lerp(0.62, 0.93, easeInOutCubic(e));
+  rig.wrap.visible = e < 0.12;
+  rig.strap.visible = e < 0.18;
+  rig.canopyMesh.visible = e > 0.08;
+  rig.seamMesh.visible = e > 0.08;
+  rig.ribVisuals.forEach((mesh) => { mesh.visible = e > 0.08; });
 }
-setUmbrellaBonePose(0);
 
-const umbrellaBodyHit = addHitBox(0.95, 1.45, 0.95, 0, 0.74, 0, umbrellaGroup, { type: 'umbrellaBody' });
+const umbrellaSlots = [];
+for (let i = 0; i < UMBRELLA_SLOT_COUNT; i++) {
+  const angle = (i / UMBRELLA_SLOT_COUNT) * TAU + 0.2;
+  umbrellaSlots.push({
+    x: UMBRELLA_STAND.x + Math.cos(angle) * 0.105,
+    z: UMBRELLA_STAND.z + Math.sin(angle) * 0.105,
+    tiltX: Math.sin(angle) * 0.085,
+    tiltZ: -Math.cos(angle) * 0.085,
+    rotY: -angle,
+  });
+}
+
+function createUmbrellaRig(index, slot) {
+  const group = new THREE.Group();
+  group.position.set(slot.x, SIDEWALK_TOP, slot.z);
+  group.rotation.set(slot.tiltX, slot.rotY, slot.tiltZ);
+  world.add(group);
+
+  cylinder(group, M.metalDark, 0.012, 0.012, 0.99, 0, 0.585, 0, {
+    seg: 8, cast: false, receive: false,
+  });
+  const handle = new THREE.Mesh(umbrellaHandleGeometry, M.metalDark);
+  handle.castShadow = false;
+  group.add(handle);
+  const hubCap = new THREE.Mesh(umbrellaHubGeometry, M.metalDark);
+  hubCap.scale.set(1, 0.65, 1);
+  hubCap.position.y = UMBRELLA_HUB_Y;
+  hubCap.castShadow = false;
+  group.add(hubCap);
+  const tipCap = new THREE.Mesh(umbrellaTipGeometry, M.metalLight);
+  tipCap.position.y = UMBRELLA_HUB_Y + 0.085;
+  tipCap.castShadow = false;
+  group.add(tipCap);
+  const runner = new THREE.Mesh(umbrellaRunnerGeometry, M.metalLight);
+  runner.rotation.x = Math.PI / 2;
+  runner.position.y = 0.72;
+  runner.castShadow = false;
+  group.add(runner);
+  const wrap = new THREE.Mesh(umbrellaWrapGeometry, umbrellaWrapMaterial);
+  wrap.castShadow = false;
+  group.add(wrap);
+
+  const rootBone = new THREE.Bone();
+  rootBone.name = 'umbrella-root-' + index;
+  rootBone.position.set(0, UMBRELLA_HUB_Y, 0);
+  group.add(rootBone);
+  const ribBones = [];
+  const ribVisuals = [];
+  for (let i = 0; i < UMBRELLA_RIB_COUNT; i++) {
+    const angle = (i / UMBRELLA_RIB_COUNT) * TAU;
+    const openDir = new THREE.Vector3(
+      Math.cos(angle) * UMBRELLA_RIM_RADIUS,
+      -UMBRELLA_RIM_DROP,
+      Math.sin(angle) * UMBRELLA_RIM_RADIUS
+    ).normalize();
+    const closedDir = new THREE.Vector3(
+      Math.cos(angle) * 0.018,
+      -0.4,
+      Math.sin(angle) * 0.018
+    ).normalize();
+    const bone = new THREE.Bone();
+    bone.name = 'umbrella-rib-' + index + '-' + i;
+    bone.position.set(0, UMBRELLA_HUB_Y, 0);
+    bone.quaternion.setFromUnitVectors(UMBRELLA_UP, openDir);
+    group.add(bone);
+    const ribMesh = new THREE.Mesh(umbrellaRibGeometry, M.metalDark);
+    ribMesh.position.y = UMBRELLA_RIB_LENGTH * 0.5;
+    ribMesh.castShadow = false;
+    bone.add(ribMesh);
+    const tipMesh = new THREE.Mesh(umbrellaRibTipGeometry, M.metalLight);
+    tipMesh.position.y = UMBRELLA_RIB_LENGTH;
+    tipMesh.castShadow = false;
+    bone.add(tipMesh);
+    ribVisuals.push(ribMesh, tipMesh);
+    ribBones.push({ bone, openDir, closedDir });
+  }
+
+  const canopyMesh = new THREE.SkinnedMesh(umbrellaCanopyGeometry, umbrellaCanopyMaterial);
+  canopyMesh.castShadow = false;
+  canopyMesh.receiveShadow = false;
+  canopyMesh.frustumCulled = false;
+  group.add(canopyMesh);
+  const seamMesh = new THREE.SkinnedMesh(umbrellaSeamGeometry, umbrellaSeamMaterial);
+  seamMesh.castShadow = false;
+  seamMesh.frustumCulled = false;
+  group.add(seamMesh);
+  group.updateMatrixWorld(true);
+  const skeleton = new THREE.Skeleton([...ribBones.map((r) => r.bone), rootBone]);
+  canopyMesh.bind(skeleton);
+  seamMesh.bind(skeleton);
+
+  const strap = new THREE.Group();
+  const band = new THREE.Mesh(umbrellaStrapGeometry, umbrellaStrapMaterial);
+  band.rotation.x = Math.PI / 2;
+  band.position.y = 0.82;
+  band.castShadow = false;
+  strap.add(band);
+  const buckle = new THREE.Mesh(umbrellaBuckleGeometry, umbrellaBuckleMaterial);
+  buckle.position.set(0.058, 0.82, 0);
+  buckle.castShadow = false;
+  strap.add(buckle);
+  group.add(strap);
+
+  const state = createUmbrellaState(slot);
+  const rig = {
+    index,
+    group,
+    state,
+    ribBones,
+    ribVisuals,
+    canopyMesh,
+    seamMesh,
+    skeleton,
+    runner,
+    tipCap,
+    wrap,
+    strap,
+    bodyHit: null,
+  };
+  setUmbrellaBonePoseForRig(rig, 0);
+  rig.bodyHit = addHitBox(1.04, 1.3, 1.04, 0, 0.62, 0, group, { type: 'umbrellaBody', rig });
+  return rig;
+}
+
+const umbrellaRigs = [];
+for (let i = 0; i < UMBRELLA_SLOT_COUNT; i++) {
+  umbrellaRigs.push(createUmbrellaRig(i, umbrellaSlots[i]));
+}
+
+let activeUmbrellaRig = null;
+let umbrellaGroup = null;
+let umbrellaState = null;
+let umbrellaCanopyMesh = null;
+let umbrellaTipCap = null;
+let umbrellaRibBones = [];
+let umbrellaRunner = null;
+let umbrellaBodyHit = null;
+
+function activateUmbrellaRig(rig) {
+  activeUmbrellaRig = rig;
+  umbrellaGroup = rig.group;
+  umbrellaState = rig.state;
+  umbrellaCanopyMesh = rig.canopyMesh;
+  umbrellaTipCap = rig.tipCap;
+  umbrellaRibBones = rig.ribBones;
+  umbrellaRunner = rig.runner;
+  umbrellaBodyHit = rig.bodyHit;
+}
+activateUmbrellaRig(umbrellaRigs[0]);
+
+function setUmbrellaBonePose(value) {
+  if (!activeUmbrellaRig) return;
+  setUmbrellaBonePoseForRig(activeUmbrellaRig, value);
+}
+
 addHitBox(0.45, 1.15, 0.45, UMBRELLA_STAND.x, 0.82, UMBRELLA_STAND.z, world, { type: 'umbrellaStand' });
 
 function takeUmbrellaOut() {
@@ -6085,6 +6199,23 @@ function takeUmbrellaOut() {
   umbrellaState.openFrom = 0;
   umbrellaState.openStartedAt = performance.now();
   playUmbrellaOpen();
+}
+
+let pendingUmbrellaRig = null;
+
+function takeUmbrellaByRig(rig) {
+  if (!rig) return;
+  if (activeUmbrellaRig !== rig) {
+    if (!umbrellaState.inStand) {
+      // Returning one umbrella before taking the next keeps only one airborne
+      // at a time while still allowing any umbrella in the rack to be chosen.
+      pendingUmbrellaRig = rig;
+      returnUmbrellaToStand();
+      return;
+    }
+    activateUmbrellaRig(rig);
+  }
+  if (umbrellaState.inStand) takeUmbrellaOut();
 }
 
 function returnUmbrellaToStand() {
@@ -6123,7 +6254,7 @@ function toggleUmbrellaOpen() {
 function nearUmbrellaStandScreen(x, y) {
   const projected = new THREE.Vector3(
     UMBRELLA_STAND.x,
-    SIDEWALK_TOP + 0.82,
+    0.82,
     UMBRELLA_STAND.z
   ).project(camera);
   const sx = (projected.x * 0.5 + 0.5) * window.innerWidth;
@@ -6666,10 +6797,13 @@ function finishGesture() {
       if (umbrellaState.inStand) takeUmbrellaOut();
       else returnUmbrellaToStand();
     } else if (data.type === 'umbrellaBody') {
-      if (umbrellaState.inStand) {
-        takeUmbrellaOut();
-      } else if (nearUmbrellaStandScreen(gesture.startX, gesture.startY)) {
+      const rig = data.rig;
+      if (!umbrellaState.inStand && nearUmbrellaStandScreen(gesture.startX, gesture.startY)) {
+        // Clicking the rack always puts the carried umbrella back, even when
+        // the ray first touches the body of a still-racked umbrella.
         returnUmbrellaToStand();
+      } else if (rig && rig.state.inStand) {
+        takeUmbrellaByRig(rig);
       } else {
         toggleUmbrellaOpen();
       }
@@ -6747,17 +6881,29 @@ function onPointerDown(event) {
   const x = event.clientX;
   const y = event.clientY;
   const pointerId = event.pointerId;
+
+  // The rack is a reliable return target: a click in the stand area always
+  // puts the carried umbrella back before any other umbrella hit is handled.
+  if (umbrellaState && !umbrellaState.inStand &&
+      nearUmbrellaStandScreen(event.clientX, event.clientY)) {
+    returnUmbrellaToStand();
+    controls.enabled = true;
+    return;
+  }
+
   try {
     renderer.domElement.setPointerCapture(pointerId);
   } catch (e) {
     // ignore
   }
 
-  if (hit.data.type === 'umbrellaBody' && !umbrellaState.inStand) {
+  if (hit.data.type === 'umbrellaBody' && hit.data.rig && !hit.data.rig.state.inStand) {
+    if (activeUmbrellaRig !== hit.data.rig) activateUmbrellaRig(hit.data.rig);
     activeGesture = {
       kind: 'umbrella',
       pointerId,
       hit,
+      rig: hit.data.rig,
       startX: x,
       startY: y,
       moved: false,
@@ -7030,9 +7176,12 @@ function updateInteractions(dt, t) {
   if (umbrellaState.taking) {
     umbrellaState.takeT = clamp((performance.now() - umbrellaState.takeStartedAt) / 950, 0, 1);
     const k = easeInOutCubic(umbrellaState.takeT);
-    umbrellaGroup.position.x = lerp(UMBRELLA_STAND.x, UMBRELLA_OUT.x, k);
-    umbrellaGroup.position.z = lerp(UMBRELLA_STAND.z, UMBRELLA_OUT.z, k);
+    umbrellaGroup.position.x = lerp(umbrellaState.standX, UMBRELLA_OUT.x, k);
+    umbrellaGroup.position.z = lerp(umbrellaState.standZ, UMBRELLA_OUT.z, k);
     umbrellaGroup.position.y = SIDEWALK_TOP + Math.sin(k * Math.PI) * 0.14;
+    umbrellaGroup.rotation.x = lerp(umbrellaState.standTiltX, 0, k);
+    umbrellaGroup.rotation.z = lerp(umbrellaState.standTiltZ, 0, k);
+    umbrellaGroup.rotation.y = lerp(umbrellaState.standRotY, 0, k);
     if (umbrellaState.takeT > 0.55 && umbrellaState.autoOpenRain && !umbrellaState.autoOpenTriggered) {
       umbrellaState.autoOpenTriggered = true;
       setUmbrellaOpenTarget(1, true);
@@ -7040,6 +7189,7 @@ function updateInteractions(dt, t) {
     if (umbrellaState.takeT >= 1) {
       umbrellaState.taking = false;
       umbrellaGroup.position.set(UMBRELLA_OUT.x, SIDEWALK_TOP, UMBRELLA_OUT.z);
+      umbrellaGroup.rotation.set(0, 0, 0);
       umbrellaState.dragTargetX = UMBRELLA_OUT.x;
       umbrellaState.dragTargetZ = UMBRELLA_OUT.z;
     }
@@ -7057,8 +7207,8 @@ function updateInteractions(dt, t) {
     } else {
       umbrellaState.returnT = clamp((performance.now() - umbrellaState.returnStartedAt) / 800, 0, 1);
       const k = easeInOutCubic(umbrellaState.returnT);
-      umbrellaGroup.position.x = lerp(umbrellaState.returnStartX, UMBRELLA_STAND.x, k);
-      umbrellaGroup.position.z = lerp(umbrellaState.returnStartZ, UMBRELLA_STAND.z, k);
+      umbrellaGroup.position.x = lerp(umbrellaState.returnStartX, umbrellaState.standX, k);
+      umbrellaGroup.position.z = lerp(umbrellaState.returnStartZ, umbrellaState.standZ, k);
       umbrellaGroup.position.y = SIDEWALK_TOP + Math.sin(k * Math.PI) * 0.07;
       if (umbrellaState.returnT >= 1) {
         umbrellaState.returning = false;
@@ -7067,8 +7217,18 @@ function updateInteractions(dt, t) {
         umbrellaState.open = 0;
         umbrellaState.targetOpen = 0;
         umbrellaState.dragging = false;
-        umbrellaGroup.position.set(UMBRELLA_STAND.x, SIDEWALK_TOP, UMBRELLA_STAND.z);
-        umbrellaGroup.rotation.set(0, 0, 0);
+        umbrellaGroup.position.set(umbrellaState.standX, SIDEWALK_TOP, umbrellaState.standZ);
+        umbrellaGroup.rotation.set(
+          umbrellaState.standTiltX,
+          umbrellaState.standRotY,
+          umbrellaState.standTiltZ
+        );
+        if (pendingUmbrellaRig) {
+          const nextRig = pendingUmbrellaRig;
+          pendingUmbrellaRig = null;
+          activateUmbrellaRig(nextRig);
+          takeUmbrellaOut();
+        }
       }
     }
   } else if (!umbrellaState.inStand) {
@@ -7097,9 +7257,10 @@ function updateInteractions(dt, t) {
     umbrellaGroup.position.y = SIDEWALK_TOP +
       0.16 * (Math.abs(umbrellaState.tiltX) + Math.abs(umbrellaState.tiltZ));
   } else {
-    umbrellaGroup.position.set(UMBRELLA_STAND.x, SIDEWALK_TOP, UMBRELLA_STAND.z);
-    umbrellaGroup.rotation.x *= 0.9;
-    umbrellaGroup.rotation.z *= 0.9;
+    umbrellaGroup.position.set(umbrellaState.standX, SIDEWALK_TOP, umbrellaState.standZ);
+    umbrellaGroup.rotation.x += (umbrellaState.standTiltX - umbrellaGroup.rotation.x) * Math.min(1, dt * 5);
+    umbrellaGroup.rotation.z += (umbrellaState.standTiltZ - umbrellaGroup.rotation.z) * Math.min(1, dt * 5);
+    umbrellaGroup.rotation.y += (umbrellaState.standRotY - umbrellaGroup.rotation.y) * Math.min(1, dt * 5);
   }
 
   const openProgress = clamp((performance.now() - umbrellaState.openStartedAt) / 1600, 0, 1);
@@ -7435,7 +7596,7 @@ const interactionDebug = {
   bikeBasketFlowerGroup,
   bikeWheelGroups,
   door: doorState,
-  umbrella: umbrellaState,
+  get umbrella() { return umbrellaState; },
   trees: treeInteract,
   posters: posterInteract,
   balloons: balloonRecords,
@@ -7447,9 +7608,14 @@ const interactionDebug = {
   takeUmbrellaOut,
   returnUmbrellaToStand,
   toggleUmbrellaOpen,
-  umbrellaGroup,
-  umbrellaRibBones,
-  umbrellaCanopyMesh,
+  takeUmbrellaByRig,
+  get umbrellaGroup() { return umbrellaGroup; },
+  get umbrellaRibBones() { return umbrellaRibBones; },
+  get umbrellaCanopyMesh() { return umbrellaCanopyMesh; },
+  umbrellaRigs,
+  umbrellaSlots,
+  getActiveUmbrella: () => activeUmbrellaRig,
+  setUmbrellaPoseForRig: (rig, value) => setUmbrellaBonePoseForRig(rig, value),
   neonFlash,
   neonFlashMaterial: neonFlashMat,
   balloonClusterState,
