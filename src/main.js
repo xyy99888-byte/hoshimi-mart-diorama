@@ -4350,6 +4350,7 @@ for (let i = 0; i < 4; i++) {
 }
 
 // festival bunting above the alley gate
+const festivalFlags = [];
 {
   const points = [
     new THREE.Vector3(-6.55, SIDEWALK_TOP + 2.95, -0.94),
@@ -4375,6 +4376,7 @@ for (let i = 0; i < 4; i++) {
     flag.position.y -= 0.02;
     flag.rotation.z = 0.06 * Math.sin(i * 2.1);
     sunnyDecor.add(flag);
+    festivalFlags.push({ flag, baseZ: flag.rotation.z, phase: i * 1.3 });
   }
 }
 
@@ -5816,13 +5818,8 @@ const UMBRELLA_UP = new THREE.Vector3(0, 1, 0);
 // Muted, low-saturation palette inspired by Japanese vinyl umbrellas: slate
 // blue, ink green, warm gray, muted wine and oat. Same material family, only
 // the cloth hue changes slightly so the rack still reads as one set.
-const UMBRELLA_PALETTE = [
-  0x40525f,
-  0x3e5348,
-  0x756f63,
-  0x68464a,
-  0xb4ada0,
-];
+const UMBRELLA_LEGACY_GREEN = 0x2d4942;
+const UMBRELLA_LEGACY_RIM = 0xd9cfb4;
 
 const umbrellaFabricMap = canvasTexture(256, 256, (ctx, w, h) => {
   ctx.fillStyle = '#e8e5dd';
@@ -5862,26 +5859,22 @@ function addUmbrellaSheen(material) {
   return material;
 }
 
-function makeUmbrellaCanopyMaterial(index) {
-  const color = new THREE.Color(UMBRELLA_PALETTE[index % UMBRELLA_PALETTE.length]);
+function makeUmbrellaCanopyMaterial() {
   const material = new THREE.MeshToonMaterial({
-    color,
+    color: 0xffffff,
     gradientMap: TOON_RAMP,
     vertexColors: true,
     side: THREE.DoubleSide,
     skinning: true,
-    map: umbrellaFabricMap,
   });
   return addUmbrellaSheen(material);
 }
 
-function makeUmbrellaWrapMaterial(index) {
-  const color = new THREE.Color(UMBRELLA_PALETTE[index % UMBRELLA_PALETTE.length]).multiplyScalar(0.82);
+function makeUmbrellaWrapMaterial() {
   const material = new THREE.MeshToonMaterial({
-    color,
+    color: UMBRELLA_LEGACY_GREEN,
     gradientMap: TOON_RAMP,
     side: THREE.DoubleSide,
-    map: umbrellaFabricMap,
   });
   return addUmbrellaSheen(material);
 }
@@ -5905,7 +5898,7 @@ const umbrellaStrapGeometry = new THREE.TorusGeometry(0.047, 0.006, 5, 14);
 const umbrellaBuckleGeometry = new THREE.BoxGeometry(0.022, 0.03, 0.016);
 const umbrellaStrapMaterial = toon(0xcbbf9d, { side: THREE.DoubleSide });
 const umbrellaBuckleMaterial = basic(0x6f5c45);
-const umbrellaRibMaterial = toon(0x8d897d, { soft: true });
+const umbrellaRibMaterial = M.metalDark;
 const umbrellaGripGeometry = new THREE.CylinderGeometry(0.019, 0.021, 0.22, 10);
 const umbrellaGripCapGeometry = new THREE.SphereGeometry(0.021, 9, 7);
 const umbrellaGripMaterial = toon(0x4b382b, { soft: true });
@@ -5966,9 +5959,9 @@ const umbrellaCanopySkinIndices = [];
 const umbrellaCanopySkinWeights = [];
 const umbrellaCanopyIndices = [];
 {
-  const core = new THREE.Color(0.86, 0.86, 0.83);
-  const cloth = new THREE.Color(0.99, 0.99, 0.96);
-  const rim = new THREE.Color(1.24, 1.18, 1.04);
+  const core = new THREE.Color(UMBRELLA_LEGACY_GREEN);
+  const cloth = new THREE.Color(UMBRELLA_LEGACY_GREEN);
+  const rim = new THREE.Color(UMBRELLA_LEGACY_RIM);
   umbrellaCanopyPositions.push(0, UMBRELLA_HUB_Y, 0);
   umbrellaCanopyColors.push(core.r, core.g, core.b);
   umbrellaCanopyUvs.push(0.5, 0.5);
@@ -6049,7 +6042,7 @@ umbrellaSeamGeometry.setAttribute('skinWeight', new THREE.Float32BufferAttribute
 umbrellaSeamGeometry.setIndex(umbrellaSeamIndices);
 umbrellaSeamGeometry.computeVertexNormals();
 const umbrellaSeamMaterial = new THREE.MeshToonMaterial({
-  color: 0x555b52,
+  color: 0x263d38,
   gradientMap: TOON_RAMP,
   side: THREE.DoubleSide,
   skinning: true,
@@ -8432,6 +8425,18 @@ function updateDetailInteractions(dt, t) {
   detailSunny.visible = weatherMix > 0.34;
   detailRain.visible = weatherMix < 0.34;
   aFrameGroup.visible = detailSunny.visible;
+
+  cloudSprites.forEach((sprite, i) => {
+    if (sprite.userData.detailBaseX === undefined) {
+      sprite.userData.detailBaseX = sprite.position.x;
+      sprite.userData.detailBaseY = sprite.position.y;
+    }
+    sprite.position.x = sprite.userData.detailBaseX + Math.sin(t * 0.028 + i * 1.4) * 0.55;
+    sprite.position.y = sprite.userData.detailBaseY + Math.sin(t * 0.021 + i * 2.1) * 0.18;
+  });
+  festivalFlags.forEach(({ flag, baseZ, phase }) => {
+    flag.rotation.z = baseZ + Math.sin(t * 1.15 + phase) * 0.045;
+  });
 
   const signHalo = 0.028 + weatherMix * 0.018 + (1 - weatherMix) * 0.075;
   detailSignHaloMat.opacity = signHalo;
