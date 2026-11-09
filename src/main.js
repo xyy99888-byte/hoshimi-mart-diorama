@@ -3367,32 +3367,123 @@ const streetKit = kit('32-门口杂物', 3.55, { fromY: -0.55, scaleFrom: 0.92 }
     box(streetKit, M.metalDark, 0.07, 0.06, 0.02, b.x, SIDEWALK_TOP + 0.5, -0.42, { cast: false });
     contactShadow(streetKit, b.x, -0.58, 0.45, 0.48, 0.28, SIDEWALK_TOP + 0.006);
   });
-  // umbrella stand beside the door, restored to the original rainy-night
-  // arrangement: five short colored umbrellas leaning in the metal bucket.
-  cylinder(streetKit, M.metalDark, 0.2, 0.22, 0.44, -0.7, SIDEWALK_TOP + 0.23, -0.63, { seg: 16, outline: 0.01 });
-  cylinder(streetKit, M.metalLight, 0.19, 0.19, 0.02, -0.7, SIDEWALK_TOP + 0.43, -0.63, { seg: 16, cast: false });
+  // Openwork umbrella stand beside the door. The wire basket and the proper
+  // handle-up closed umbrellas are a static arrangement; there is no hit target.
+  const standX = -0.7;
+  const standZ = -0.63;
+  const standBaseY = SIDEWALK_TOP + 0.015;
+  const standTopY = SIDEWALK_TOP + 0.49;
+  const standBottomR = 0.205;
+  const standTopR = 0.19;
+  const standMetal = M.metalDark;
+  const standRim = M.metalLight;
+
+  // Three circular wire hoops, slightly tapered, plus a lattice of vertical
+  // rods. No solid bucket body, so the colored umbrella bodies stay visible.
+  [standBaseY + 0.01, SIDEWALK_TOP + 0.27, standTopY].forEach((y, ringIndex) => {
+    const radius = ringIndex === 0 ? standBottomR : ringIndex === 1 ? 0.202 : standTopR;
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(radius, ringIndex === 2 ? 0.008 : 0.006, 6, 32), ringIndex === 2 ? standRim : standMetal);
+    ring.rotation.x = Math.PI / 2;
+    ring.position.set(standX, y, standZ);
+    ring.castShadow = false;
+    streetKit.add(ring);
+  });
+  for (let i = 0; i < 10; i++) {
+    const a = (i / 10) * TAU;
+    const x0 = standX + Math.cos(a) * standBottomR;
+    const z0 = standZ + Math.sin(a) * standBottomR;
+    const x1 = standX + Math.cos(a) * standTopR;
+    const z1 = standZ + Math.sin(a) * standTopR;
+    barBetween(streetKit, standMetal, [x0, standBaseY, z0], [x1, standTopY, z1], 0.0055);
+    // four small rubber feet
+    if (i % 3 === 0) {
+      cylinder(streetKit, M.metalLight, 0.014, 0.016, 0.025, x0, SIDEWALK_TOP + 0.012, z0, { seg: 6, cast: false });
+    }
+  }
+  // Open cross supports at the bottom, so the basket reads as a real wire rack.
+  barBetween(streetKit, standMetal, [standX - standBottomR, standBaseY + 0.012, standZ], [standX + standBottomR, standBaseY + 0.012, standZ], 0.0045);
+  barBetween(streetKit, standMetal, [standX, standBaseY + 0.012, standZ - standBottomR], [standX, standBaseY + 0.012, standZ + standBottomR], 0.0045);
+  contactShadow(streetKit, standX, standZ, 0.48, 0.48, 0.22, SIDEWALK_TOP + 0.006);
+
   const umbrellaColors = [0x244766, 0xa84742, 0xc7a44e, 0x42634f, 0x6d5a85];
+  const foldMap = canvasTexture(128, 128, (ctx, w, h) => {
+    ctx.fillStyle = '#f1f1ed';
+    ctx.fillRect(0, 0, w, h);
+    for (let i = 0; i < 9; i++) {
+      const x = (i + 0.5) * (w / 9);
+      const grad = ctx.createLinearGradient(x - 5, 0, x + 5, 0);
+      grad.addColorStop(0, 'rgba(255,255,255,0.0)');
+      grad.addColorStop(0.45, 'rgba(44,48,45,0.20)');
+      grad.addColorStop(0.55, 'rgba(255,255,255,0.10)');
+      grad.addColorStop(1, 'rgba(255,255,255,0.0)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(x - 5, 0, 10, h);
+    }
+    ctx.strokeStyle = 'rgba(76,80,76,0.18)';
+    ctx.lineWidth = 1;
+    for (let i = 0; i < 6; i++) {
+      ctx.beginPath();
+      ctx.moveTo(0, 18 + i * 18);
+      ctx.lineTo(w, 24 + i * 18);
+      ctx.stroke();
+    }
+  });
+  const handleCurve = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(0, 1.115, 0),
+    new THREE.Vector3(0, 1.19, 0),
+    new THREE.Vector3(0.012, 1.245, 0),
+    new THREE.Vector3(0.060, 1.272, 0),
+    new THREE.Vector3(0.108, 1.245, 0),
+    new THREE.Vector3(0.118, 1.205, 0),
+  ]);
+  const handleGeometry = new THREE.TubeGeometry(handleCurve, 18, 0.014, 6, false);
+  const handleMaterial = toon(0x3c2c22, { soft: true });
   umbrellaColors.forEach((c, i) => {
     const a = (i / umbrellaColors.length) * TAU + 0.2;
-    const bx = -0.7 + Math.cos(a) * 0.075;
-    const bz = -0.63 + Math.sin(a) * 0.075;
-    const leanX = Math.cos(a) * 0.11;
-    const leanZ = Math.sin(a) * 0.11;
-    barBetween(streetKit, M.metalDark, [bx, SIDEWALK_TOP + 0.3, bz], [bx + leanX, SIDEWALK_TOP + 1.02, bz + leanZ], 0.013);
+    const bx = standX + Math.cos(a) * 0.06;
+    const bz = standZ + Math.sin(a) * 0.06;
+    const group = new THREE.Group();
+    group.position.set(bx, SIDEWALK_TOP, bz);
+    group.rotation.z = -Math.cos(a) * 0.15;
+    group.rotation.x = Math.sin(a) * 0.15;
+    streetKit.add(group);
+
+    // Tip-down umbrella: the handle is above the canopy, as in a real
+    // handle-up umbrella resting in a stand.
+    cylinder(group, M.metalDark, 0.009, 0.012, 1.04, 0, 0.62, 0, { seg: 6, cast: false });
+    cylinder(group, M.metalDark, 0.008, 0.015, 0.10, 0, 0.14, 0, { seg: 6, cast: false });
+    const ferrule = new THREE.Mesh(new THREE.ConeGeometry(0.013, 0.065, 8), M.metalDark);
+    ferrule.position.y = 0.10;
+    ferrule.rotation.z = Math.PI;
+    group.add(ferrule);
+
     const canopy = new THREE.Mesh(
-      new THREE.ConeGeometry(0.068, 0.62, 9, 1, true),
-      toon(c, { side: THREE.DoubleSide })
+      new THREE.ConeGeometry(0.078, 0.58, 10, 1, false),
+      toon(c, { map: foldMap, side: THREE.DoubleSide })
     );
-    canopy.position.set(bx + leanX * 0.6, SIDEWALK_TOP + 0.75, bz + leanZ * 0.6);
-    canopy.rotation.z = -leanX * 1.6;
-    canopy.rotation.x = leanZ * 1.6;
+    canopy.rotation.z = Math.PI;
+    canopy.position.y = 0.44;
     canopy.castShadow = true;
-    streetKit.add(canopy);
-    cylinder(streetKit, M.metalDark, 0.018, 0.018, 0.12, bx + leanX, SIDEWALK_TOP + 1.05, bz + leanZ, {
-      seg: 6,
-      cast: false,
-      rz: 0.5,
-    });
+    group.add(canopy);
+
+    const runner = new THREE.Mesh(new THREE.TorusGeometry(0.038, 0.006, 5, 12), M.metalLight);
+    runner.rotation.x = Math.PI / 2;
+    runner.position.y = 0.726;
+    group.add(runner);
+    const canopyTop = new THREE.Mesh(new THREE.SphereGeometry(0.052, 9, 6), toon(c, { soft: true }));
+    canopyTop.scale.set(1.0, 0.22, 1.0);
+    canopyTop.position.y = 0.733;
+    group.add(canopyTop);
+    const tie = new THREE.Mesh(new THREE.TorusGeometry(0.031, 0.005, 5, 12), toon(0xd9ccb3, { soft: true }));
+    tie.rotation.x = Math.PI / 2;
+    tie.position.y = 0.32;
+    group.add(tie);
+
+    const handle = new THREE.Mesh(handleGeometry, handleMaterial);
+    group.add(handle);
+    const handleEnd = new THREE.Mesh(new THREE.SphereGeometry(0.016, 7, 5), handleMaterial);
+    handleEnd.position.set(0.118, 1.205, 0);
+    group.add(handleEnd);
   });
   // wet floor sign near door
   const warningTex = TEX.caution;
@@ -7626,81 +7717,99 @@ detailDecal(detailRain, detailStainMap, 0.34, 0.8, 0.02, 0.58, -0.936, 0, 0.34, 
   detailDecal(detailRain, detailStainMap, 0.24, 0.24, x, 0.2, -0.414, 0, 0.35, 0x6d929a);
 });
 
-// A small sleeping calico cat rests beside the bicycle. It is a quiet,
+// A small calico cat curled up asleep beside the bicycle. It is a quiet,
 // non-interactive focal point rather than another hit target.
 const catGroup = new THREE.Group();
 catGroup.position.set(2.94, SIDEWALK_TOP, -1.18);
-catGroup.rotation.y = -0.28;
+catGroup.rotation.y = -0.38;
 world.add(catGroup);
-const catState = { time: 0, tail: null };
+const catState = { time: 0, body: null, tail: null };
 {
   const cream = toon(0xd8c6aa, { soft: true });
   const rust = toon(0xb46b42, { soft: true });
   const dark = toon(0x3e3731, { soft: true });
   const pink = toon(0xe9a8a8, { soft: true });
-  const body = new THREE.Mesh(new THREE.SphereGeometry(0.105, 12, 9), cream);
-  body.scale.set(1.15, 0.72, 1.65);
-  body.position.y = 0.11;
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.12, 12, 9), cream);
+  body.scale.set(1.3, 0.52, 1.05);
+  body.position.set(0, 0.075, 0);
   catGroup.add(body);
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.072, 12, 9), cream);
-  head.position.set(0.015, 0.15, 0.155);
+  catState.body = body;
+  const haunch = new THREE.Mesh(new THREE.SphereGeometry(0.085, 10, 8), cream);
+  haunch.scale.set(1.1, 0.85, 1.1);
+  haunch.position.set(-0.065, 0.07, -0.025);
+  catGroup.add(haunch);
+  // Head settles low and rests against the tucked front paws.
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.075, 12, 9), cream);
+  head.scale.set(1.0, 0.9, 0.95);
+  head.position.set(0.072, 0.098, 0.16);
+  head.rotation.z = -0.24;
   catGroup.add(head);
-  const muzzle = new THREE.Mesh(new THREE.SphereGeometry(0.034, 8, 6), cream);
-  muzzle.scale.set(1.1, 0.65, 0.85);
-  muzzle.position.set(0.015, 0.125, 0.216);
+  const muzzle = new THREE.Mesh(new THREE.SphereGeometry(0.032, 8, 6), cream);
+  muzzle.scale.set(1.1, 0.62, 0.85);
+  muzzle.position.set(0.078, 0.072, 0.218);
   catGroup.add(muzzle);
   [-1, 1].forEach((side) => {
-    const ear = new THREE.Mesh(new THREE.ConeGeometry(0.033, 0.075, 4), side > 0 ? rust : cream);
-    ear.position.set(0.015 + side * 0.045, 0.213, 0.155);
-    ear.rotation.z = side * -0.22;
+    const ear = new THREE.Mesh(new THREE.ConeGeometry(0.03, 0.062, 4), side > 0 ? rust : cream);
+    ear.position.set(0.072 + side * 0.039, 0.146, 0.135);
+    ear.rotation.z = side * 0.48;
     catGroup.add(ear);
-    const inner = new THREE.Mesh(new THREE.ConeGeometry(0.017, 0.042, 4), pink);
-    inner.position.set(0.015 + side * 0.045, 0.213, 0.17);
-    inner.rotation.z = side * -0.22;
+    const inner = new THREE.Mesh(new THREE.ConeGeometry(0.015, 0.035, 4), pink);
+    inner.position.set(0.072 + side * 0.039, 0.146, 0.148);
+    inner.rotation.z = side * 0.48;
     catGroup.add(inner);
-    const eye = new THREE.Mesh(new THREE.BoxGeometry(0.021, 0.005, 0.003), dark);
-    eye.position.set(0.015 + side * 0.027, 0.166, 0.225);
-    eye.rotation.z = side * -0.08;
+    const eye = new THREE.Mesh(new THREE.BoxGeometry(0.021, 0.0045, 0.003), dark);
+    eye.position.set(0.072 + side * 0.023, 0.106, 0.222);
+    eye.rotation.z = side * -0.06;
     catGroup.add(eye);
   });
-  const nose = new THREE.Mesh(new THREE.SphereGeometry(0.009, 7, 5), pink);
+  const nose = new THREE.Mesh(new THREE.SphereGeometry(0.008, 7, 5), pink);
   nose.scale.set(1.2, 0.7, 0.7);
-  nose.position.set(0.015, 0.132, 0.248);
+  nose.position.set(0.078, 0.075, 0.243);
   catGroup.add(nose);
-  // Calico patches on the visible top surface.
-  [[-0.045, 0.184, 0.0, 0.046], [0.038, 0.181, -0.045, 0.05], [0.0, 0.198, 0.085, 0.033], [0.05, 0.2, 0.14, 0.032]].forEach(([x, y, z, s], i) => {
+  // Calico patches on the curled top surface.
+  [[-0.05, 0.132, -0.03, 0.052], [0.045, 0.132, -0.07, 0.043], [-0.02, 0.128, 0.06, 0.037], [0.075, 0.145, 0.105, 0.028]].forEach(([x, y, z, s], i) => {
     const patch = new THREE.Mesh(new THREE.SphereGeometry(s, 8, 6), i % 2 ? rust : dark);
-    patch.scale.set(1.25, 0.22, 1.05);
+    patch.scale.set(1.2, 0.18, 1.0);
+    patch.rotation.y = i * 0.7;
     patch.position.set(x, y, z);
     catGroup.add(patch);
   });
-  // Four soft paws.
-  [-1, 1].forEach((side) => {
-    [0.07, -0.06].forEach((z) => {
-      const paw = new THREE.Mesh(new THREE.SphereGeometry(0.026, 7, 5), cream);
-      paw.scale.set(1.2, 0.55, 1.5);
-      paw.position.set(side * 0.075, 0.045, z);
-      catGroup.add(paw);
-    });
+  // Front paws are tucked under the chin; back paw curls into the flank.
+  [[0.035, 0.035, 0.19], [0.105, 0.035, 0.185]].forEach(([x, y, z]) => {
+    const paw = new THREE.Mesh(new THREE.SphereGeometry(0.025, 7, 5), cream);
+    paw.scale.set(1.1, 0.5, 1.25);
+    paw.position.set(x, y, z);
+    catGroup.add(paw);
   });
+  const backPaw = new THREE.Mesh(new THREE.SphereGeometry(0.028, 7, 5), cream);
+  backPaw.scale.set(1.1, 0.5, 1.3);
+  backPaw.position.set(-0.135, 0.035, 0.01);
+  catGroup.add(backPaw);
+  // Tail wraps around the curled body and ends near the nose.
   const tailPivot = new THREE.Group();
-  tailPivot.position.set(0.01, 0.08, -0.15);
   catGroup.add(tailPivot);
-  const tail = new THREE.Mesh(new THREE.TorusGeometry(0.105, 0.014, 5, 14, Math.PI * 1.25), rust);
-  tail.rotation.y = Math.PI / 2;
-  tail.rotation.z = -0.5;
-  tail.position.set(0.03, 0.02, -0.09);
+  const tailCurve = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(-0.04, 0.04, -0.125),
+    new THREE.Vector3(-0.15, 0.042, -0.06),
+    new THREE.Vector3(-0.16, 0.04, 0.035),
+    new THREE.Vector3(-0.09, 0.038, 0.12),
+    new THREE.Vector3(0.01, 0.034, 0.19),
+    new THREE.Vector3(0.105, 0.032, 0.17),
+  ]);
+  const tail = new THREE.Mesh(new THREE.TubeGeometry(tailCurve, 20, 0.0125, 5, false), rust);
   tailPivot.add(tail);
+  const tailTip = new THREE.Mesh(new THREE.SphereGeometry(0.014, 7, 5), dark);
+  tailTip.position.set(0.105, 0.032, 0.17);
+  tailPivot.add(tailTip);
   catState.tail = tailPivot;
-  contactShadow(catGroup, 0.01, 0.01, 0.42, 0.38, 0.22, 0.006);
+  contactShadow(catGroup, 0.01, 0.01, 0.46, 0.4, 0.22, 0.006);
 }
 function updateCat(dt, t) {
   catState.time += dt;
-  const breath = 1 + Math.sin(catState.time * 1.7) * 0.012;
-  catGroup.children[0].scale.set(1.15 * breath, 0.72, 1.65);
+  const breath = 1 + Math.sin(catState.time * 1.45) * 0.009;
+  if (catState.body) catState.body.scale.set(1.3 * breath, 0.52 * breath, 1.05);
   if (catState.tail) {
-    catState.tail.rotation.y = Math.sin(t * 0.85) * 0.18;
-    catState.tail.rotation.x = Math.sin(t * 0.55 + 1) * 0.035;
+    catState.tail.rotation.y = Math.sin(t * 0.33) * 0.012;
   }
 }
 
@@ -7812,6 +7921,8 @@ function updateDetailInteractions(dt, t) {
   detailSunny.visible = weatherMix > 0.34;
   detailRain.visible = weatherMix < 0.34;
   aFrameGroup.visible = detailSunny.visible;
+  // The cat shelters indoors once it starts raining.
+  catGroup.visible = weatherMix > 0.34;
 
   cloudSprites.forEach((sprite, i) => {
     if (sprite.userData.detailBaseX === undefined) {
