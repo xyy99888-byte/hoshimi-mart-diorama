@@ -5172,6 +5172,9 @@ const audioLoading = new Map();
 let audioCtx = null;
 let audioMaster = null;
 let audioMuted = false;
+let ambientHum = null;
+let ambientStarting = false;
+let ambientTimer = 4.5;
 try {
   audioMuted = window.localStorage.getItem('hoshimi-muted') === '1';
 } catch (e) {
@@ -5262,6 +5265,12 @@ function playSound(key, opts = {}) {
   };
 }
 
+function startAmbientAudio() {
+  if (ambientHum || ambientStarting || audioMuted || !audioCtx) return;
+  ambientStarting = true;
+  ambientHum = startSoundLoop('ac_hum', 0.013, 0.7);
+}
+
 function startSoundLoop(key, volume = 0.12, rate = 1) {
   if (audioMuted) return null;
   const ctx = ensureAudio();
@@ -5349,6 +5358,7 @@ function syncMuteButton() {
 }
 function setAudioMuted(muted) {
   audioMuted = !!muted;
+  if (!audioMuted && audioCtx) startAmbientAudio();
   try { window.localStorage.setItem('hoshimi-muted', audioMuted ? '1' : '0'); } catch (e) {}
   if (audioMaster && audioCtx) {
     audioMaster.gain.cancelScheduledValues(audioCtx.currentTime);
@@ -5818,8 +5828,8 @@ const UMBRELLA_UP = new THREE.Vector3(0, 1, 0);
 // Muted, low-saturation palette inspired by Japanese vinyl umbrellas: slate
 // blue, ink green, warm gray, muted wine and oat. Same material family, only
 // the cloth hue changes slightly so the rack still reads as one set.
-const UMBRELLA_LEGACY_GREEN = 0x2d4942;
-const UMBRELLA_LEGACY_RIM = 0xd9cfb4;
+// The five colors from the original rainy-night-only umbrella rack.
+const UMBRELLA_PALETTE = [0x244766, 0xa84742, 0xc7a44e, 0x42634f, 0x6d5a85];
 
 const umbrellaFabricMap = canvasTexture(256, 256, (ctx, w, h) => {
   ctx.fillStyle = '#e8e5dd';
@@ -5859,9 +5869,9 @@ function addUmbrellaSheen(material) {
   return material;
 }
 
-function makeUmbrellaCanopyMaterial() {
+function makeUmbrellaCanopyMaterial(index) {
   const material = new THREE.MeshToonMaterial({
-    color: 0xffffff,
+    color: UMBRELLA_PALETTE[index % UMBRELLA_PALETTE.length],
     gradientMap: TOON_RAMP,
     vertexColors: true,
     side: THREE.DoubleSide,
@@ -5870,9 +5880,9 @@ function makeUmbrellaCanopyMaterial() {
   return addUmbrellaSheen(material);
 }
 
-function makeUmbrellaWrapMaterial() {
+function makeUmbrellaWrapMaterial(index) {
   const material = new THREE.MeshToonMaterial({
-    color: UMBRELLA_LEGACY_GREEN,
+    color: new THREE.Color(UMBRELLA_PALETTE[index % UMBRELLA_PALETTE.length]).multiplyScalar(0.86),
     gradientMap: TOON_RAMP,
     side: THREE.DoubleSide,
   });
@@ -5959,9 +5969,11 @@ const umbrellaCanopySkinIndices = [];
 const umbrellaCanopySkinWeights = [];
 const umbrellaCanopyIndices = [];
 {
-  const core = new THREE.Color(UMBRELLA_LEGACY_GREEN);
-  const cloth = new THREE.Color(UMBRELLA_LEGACY_GREEN);
-  const rim = new THREE.Color(UMBRELLA_LEGACY_RIM);
+  // Neutral vertex shading lets each rig's cloth color come from its own
+  // material while keeping the folded edge slightly darker.
+  const core = new THREE.Color(0.82, 0.82, 0.82);
+  const cloth = new THREE.Color(1.0, 1.0, 1.0);
+  const rim = new THREE.Color(0.92, 0.92, 0.92);
   umbrellaCanopyPositions.push(0, UMBRELLA_HUB_Y, 0);
   umbrellaCanopyColors.push(core.r, core.g, core.b);
   umbrellaCanopyUvs.push(0.5, 0.5);
@@ -7037,9 +7049,14 @@ function onPointerDown(event) {
   if (event.target !== renderer.domElement) return;
   if (event.pointerType === 'mouse' && event.button !== 0) return;
   const hit = findInteractionHit(event);
-  if (!hit) return;
+  if (!hit) {
+    ensureAudio();
+    startAmbientAudio();
+    return;
+  }
 
   ensureAudio();
+  startAmbientAudio();
   event.stopPropagation();
   event.preventDefault();
 
@@ -8416,6 +8433,183 @@ detailDecal(detailRain, detailStainMap, 0.34, 0.8, 0.02, 0.58, -0.936, 0, 0.34, 
   detailDecal(detailRain, detailStainMap, 0.24, 0.24, x, 0.2, -0.414, 0, 0.35, 0x6d929a);
 });
 
+// A small sleeping calico cat rests beside the bicycle. It is a quiet,
+// non-interactive focal point rather than another hit target.
+const catGroup = new THREE.Group();
+catGroup.position.set(2.94, SIDEWALK_TOP, -1.18);
+catGroup.rotation.y = -0.28;
+world.add(catGroup);
+const catState = { time: 0, tail: null };
+{
+  const cream = toon(0xd8c6aa, { soft: true });
+  const rust = toon(0xb46b42, { soft: true });
+  const dark = toon(0x3e3731, { soft: true });
+  const pink = toon(0xe9a8a8, { soft: true });
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.105, 12, 9), cream);
+  body.scale.set(1.15, 0.72, 1.65);
+  body.position.y = 0.11;
+  catGroup.add(body);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.072, 12, 9), cream);
+  head.position.set(0.015, 0.15, 0.155);
+  catGroup.add(head);
+  const muzzle = new THREE.Mesh(new THREE.SphereGeometry(0.034, 8, 6), cream);
+  muzzle.scale.set(1.1, 0.65, 0.85);
+  muzzle.position.set(0.015, 0.125, 0.216);
+  catGroup.add(muzzle);
+  [-1, 1].forEach((side) => {
+    const ear = new THREE.Mesh(new THREE.ConeGeometry(0.033, 0.075, 4), side > 0 ? rust : cream);
+    ear.position.set(0.015 + side * 0.045, 0.213, 0.155);
+    ear.rotation.z = side * -0.22;
+    catGroup.add(ear);
+    const inner = new THREE.Mesh(new THREE.ConeGeometry(0.017, 0.042, 4), pink);
+    inner.position.set(0.015 + side * 0.045, 0.213, 0.17);
+    inner.rotation.z = side * -0.22;
+    catGroup.add(inner);
+    const eye = new THREE.Mesh(new THREE.BoxGeometry(0.021, 0.005, 0.003), dark);
+    eye.position.set(0.015 + side * 0.027, 0.166, 0.225);
+    eye.rotation.z = side * -0.08;
+    catGroup.add(eye);
+  });
+  const nose = new THREE.Mesh(new THREE.SphereGeometry(0.009, 7, 5), pink);
+  nose.scale.set(1.2, 0.7, 0.7);
+  nose.position.set(0.015, 0.132, 0.248);
+  catGroup.add(nose);
+  // Calico patches on the visible top surface.
+  [[-0.045, 0.184, 0.0, 0.046], [0.038, 0.181, -0.045, 0.05], [0.0, 0.198, 0.085, 0.033], [0.05, 0.2, 0.14, 0.032]].forEach(([x, y, z, s], i) => {
+    const patch = new THREE.Mesh(new THREE.SphereGeometry(s, 8, 6), i % 2 ? rust : dark);
+    patch.scale.set(1.25, 0.22, 1.05);
+    patch.position.set(x, y, z);
+    catGroup.add(patch);
+  });
+  // Four soft paws.
+  [-1, 1].forEach((side) => {
+    [0.07, -0.06].forEach((z) => {
+      const paw = new THREE.Mesh(new THREE.SphereGeometry(0.026, 7, 5), cream);
+      paw.scale.set(1.2, 0.55, 1.5);
+      paw.position.set(side * 0.075, 0.045, z);
+      catGroup.add(paw);
+    });
+  });
+  const tailPivot = new THREE.Group();
+  tailPivot.position.set(0.01, 0.08, -0.15);
+  catGroup.add(tailPivot);
+  const tail = new THREE.Mesh(new THREE.TorusGeometry(0.105, 0.014, 5, 14, Math.PI * 1.25), rust);
+  tail.rotation.y = Math.PI / 2;
+  tail.rotation.z = -0.5;
+  tail.position.set(0.03, 0.02, -0.09);
+  tailPivot.add(tail);
+  catState.tail = tailPivot;
+  contactShadow(catGroup, 0.01, 0.01, 0.42, 0.38, 0.22, 0.006);
+}
+function updateCat(dt, t) {
+  catState.time += dt;
+  const breath = 1 + Math.sin(catState.time * 1.7) * 0.012;
+  catGroup.children[0].scale.set(1.15 * breath, 0.72, 1.65);
+  if (catState.tail) {
+    catState.tail.rotation.y = Math.sin(t * 0.85) * 0.18;
+    catState.tail.rotation.x = Math.sin(t * 0.55 + 1) * 0.035;
+  }
+}
+
+// Cherry petals drifting in sunny weather (single Points draw call).
+const petalTexture = canvasTexture(64, 64, (ctx, w, h) => {
+  ctx.clearRect(0, 0, w, h);
+  ctx.translate(w / 2, h / 2);
+  ctx.rotate(-0.35);
+  ctx.fillStyle = 'rgba(255,226,234,0.95)';
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 10, 20, 0, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(255,248,244,0.9)';
+  ctx.beginPath();
+  ctx.ellipse(-3, -4, 4, 8, 0.3, 0, TAU);
+  ctx.fill();
+});
+const PETAL_COUNT = 16;
+const petalPositions = new Float32Array(PETAL_COUNT * 3);
+const petalSeeds = [];
+for (let i = 0; i < PETAL_COUNT; i++) {
+  const x = -5.2 + Math.random() * 8.2;
+  const y = 0.3 + Math.random() * 2.4;
+  const z = -0.4 + Math.random() * 3.0;
+  petalPositions[i * 3] = x;
+  petalPositions[i * 3 + 1] = y;
+  petalPositions[i * 3 + 2] = z;
+  petalSeeds.push({ speed: 0.08 + Math.random() * 0.06, phase: Math.random() * TAU, sway: 0.1 + Math.random() * 0.18, baseZ: z });
+}
+const petalGeo = new THREE.BufferGeometry();
+petalGeo.setAttribute('position', new THREE.BufferAttribute(petalPositions, 3));
+const petalPoints = new THREE.Points(petalGeo, new THREE.PointsMaterial({
+  map: petalTexture,
+  size: 0.095,
+  transparent: true,
+  opacity: 0.78,
+  depthWrite: false,
+  alphaTest: 0.08,
+  sizeAttenuation: true,
+  color: 0xffffff,
+}));
+petalPoints.frustumCulled = false;
+detailSunny.add(petalPoints);
+function updatePetals(dt, t) {
+  const pos = petalGeo.attributes.position;
+  for (let i = 0; i < PETAL_COUNT; i++) {
+    const seed = petalSeeds[i];
+    const k = i * 3;
+    pos.array[k + 1] -= seed.speed * dt;
+    pos.array[k] += Math.sin(t * 0.55 + seed.phase) * seed.sway * dt;
+    pos.array[k + 2] = seed.baseZ + Math.cos(t * 0.4 + seed.phase) * 0.08;
+    if (pos.array[k + 1] < 0.24) {
+      pos.array[k] = -5.2 + Math.random() * 8.2;
+      pos.array[k + 1] = 2.2 + Math.random() * 1.1;
+      pos.array[k + 2] = -0.4 + Math.random() * 3.0;
+    }
+  }
+  pos.needsUpdate = true;
+}
+
+// Wet neon reflections, extremely subtle, under the sign and vending lamps.
+const neonReflectionTexture = canvasTexture(64, 256, (ctx, w, h) => {
+  ctx.clearRect(0, 0, w, h);
+  for (let i = 0; i < 22; i++) {
+    const g = ctx.createLinearGradient(0, 0, 0, h);
+    g.addColorStop(0, 'rgba(255,255,255,0)');
+    g.addColorStop(0.25, `rgba(255,255,255,${0.04 + Math.random() * 0.08})`);
+    g.addColorStop(0.62, `rgba(255,255,255,${0.04 + Math.random() * 0.1})`);
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(2 + Math.random() * (w - 6), 0, 1 + Math.random() * 3, h);
+  }
+});
+const neonReflectionRecords = [];
+[
+  { x: 0.2, z: -0.08, w: 1.8, d: 2.0, color: 0xffd49a, opacity: 0.07 },
+  { x: 2.2, z: -2.65, w: 0.9, d: 1.6, color: 0xffb3a7, opacity: 0.08 },
+  { x: 2.2, z: -3.45, w: 0.9, d: 1.6, color: 0xa9e0ff, opacity: 0.07 },
+  { x: -3.4, z: 2.45, w: 0.7, d: 1.5, color: 0xffdc9d, opacity: 0.055 },
+].forEach((spec, i) => {
+  const mat = new THREE.MeshBasicMaterial({
+    map: neonReflectionTexture,
+    color: spec.color,
+    transparent: true,
+    opacity: spec.opacity,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+  });
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(spec.w, spec.d), mat);
+  mesh.rotation.x = -Math.PI / 2;
+  mesh.position.set(spec.x, 0.176, spec.z);
+  mesh.renderOrder = 4;
+  detailRain.add(mesh);
+  neonReflectionRecords.push({ mat, baseOpacity: spec.opacity, phase: i * 1.7 });
+});
+function updateNeonReflections(dt, t) {
+  neonReflectionRecords.forEach((record) => {
+    record.mat.opacity = record.baseOpacity * (0.72 + 0.28 * Math.sin(t * 0.7 + record.phase));
+  });
+}
+
 mergeOpaqueMeshesInKit(detailCommon);
 
 // ============================================================
@@ -8493,6 +8687,29 @@ function updateDetailInteractions(dt, t) {
       child.material.opacity = 0.22 + Math.sin(t * 0.35) * 0.025;
     }
   });
+
+  updateCat(dt, t);
+  updatePetals(dt, t);
+  updateNeonReflections(dt, t);
+
+  ambientTimer -= dt;
+  if (ambientTimer <= 0 && audioCtx && !audioMuted) {
+    if (weatherMix < 0.5) {
+      playSound('water_drop', {
+        volume: 0.03,
+        rate: 0.62 + Math.random() * 0.25,
+        delay: Math.random() * 0.2,
+      });
+      ambientTimer = 2.4 + Math.random() * 2.2;
+    } else {
+      playSound('bird', {
+        volume: 0.04,
+        rate: 0.92 + Math.random() * 0.08,
+        delay: Math.random() * 0.3,
+      });
+      ambientTimer = 10 + Math.random() * 7;
+    }
+  }
 }
 
 const interactionDebug = {
