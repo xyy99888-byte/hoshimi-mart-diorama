@@ -6395,74 +6395,44 @@ const greeneryKit = kit('60-街角绿植', 0, { fromY: 0, scaleFrom: 1 });
   // flower boxes under the shop windows
   addFlowerBox(greeneryKit, -3.95, -0.5, 1.0);
   addFlowerBox(greeneryKit, -2.1, -0.5, 1.0);
-  // flowers at the base of the street lamp
-  box(greeneryKit, M.concrete, 0.9, 0.18, 0.55, -3.68, SIDEWALK_TOP + 0.09, 1.85, { outline: 0.01 });
-  for (let i = 0; i < 8; i++) {
-    addFlower(greeneryKit, -3.68 + rand(-0.34, 0.34), SIDEWALK_TOP + 0.18, 1.85 + rand(-0.16, 0.16), i, 0.8);
-  }
-  // Hanging flower basket, actually suspended from the lamp arm with three
-  // thin hanger wires. It hangs beside the lamp head rather than floating
-  // directly under the light.
-  const hx = -3.68;
-  const hz = 2.02;
-  const hookY = SIDEWALK_TOP + 4.5;
-  const basketY = SIDEWALK_TOP + 3.42;
-  const hook = new THREE.Mesh(new THREE.TorusGeometry(0.026, 0.005, 5, 12), M.metalDark);
-  hook.position.set(hx, hookY, hz);
-  hook.rotation.x = Math.PI / 2;
-  greeneryKit.add(hook);
-  for (let i = 0; i < 3; i++) {
-    const a = (i / 3) * TAU;
-    barBetween(
-      greeneryKit,
-      M.metalDark,
-      [hx, hookY, hz],
-      [hx + Math.cos(a) * 0.12, basketY + 0.12, hz + Math.sin(a) * 0.12],
-      0.0055
-    );
-  }
-  cylinder(greeneryKit, M.cardboard, 0.155, 0.115, 0.22, hx, basketY, hz, { seg: 12, outline: 0.01 });
-  // A readable wire basket frame around the coco liner.
-  [0.11, -0.11].forEach((dy, ringIndex) => {
-    const ring = new THREE.Mesh(
-      new THREE.TorusGeometry(ringIndex === 0 ? 0.165 : 0.12, 0.006, 5, 18),
-      M.metalDark
-    );
-    ring.rotation.x = Math.PI / 2;
-    ring.position.set(hx, basketY + dy, hz);
-    greeneryKit.add(ring);
+  // The street lamp rises from a real low ground flower bed rather than
+  // flowers pushed through a plain concrete slab. The bed sits behind the
+  // road curb and wraps the lamp foot with a stone border and dark soil.
+  const bedX = -3.68;
+  const bedZ = 1.72;
+  const bedW = 0.92;
+  const bedD = 0.44;
+  const bedY = SIDEWALK_TOP;
+  const borderMat = M.concrete;
+  const borderH = 0.14;
+  box(greeneryKit, borderMat, bedW, borderH, 0.06, bedX, bedY + borderH / 2, bedZ - bedD / 2 + 0.03, { outline: 0.007 });
+  box(greeneryKit, borderMat, bedW, borderH, 0.06, bedX, bedY + borderH / 2, bedZ + bedD / 2 - 0.03, { outline: 0.007 });
+  box(greeneryKit, borderMat, 0.06, borderH, bedD - 0.1, bedX - bedW / 2 + 0.03, bedY + borderH / 2, bedZ, { outline: 0.007 });
+  box(greeneryKit, borderMat, 0.06, borderH, bedD - 0.1, bedX + bedW / 2 - 0.03, bedY + borderH / 2, bedZ, { outline: 0.007 });
+  box(greeneryKit, toon(0x433128, { soft: true }), bedW - 0.13, 0.035, bedD - 0.13, bedX, bedY + borderH - 0.015, bedZ, { cast: false });
+  // Soil mounds, low foliage and stems all start inside the border.
+  const flowerSpots = [
+    [-0.32, -0.06, 0], [-0.17, 0.09, 1], [0.02, -0.08, 2], [0.19, 0.07, 3],
+    [0.32, -0.04, 4], [-0.06, 0.12, 5], [0.26, 0.12, 1],
+  ];
+  flowerSpots.forEach(([dx, dz, colorIndex]) => {
+    const fx = bedX + dx;
+    const fz = bedZ + dz;
+    sphere(greeneryKit, LEAF_MATS[colorIndex % 2], 0.075, fx, bedY + borderH + 0.025, fz, { seg: 6, cast: false });
+    addFlower(greeneryKit, fx, bedY + borderH + 0.01, fz, colorIndex, 0.72);
   });
-  for (let i = 0; i < 10; i++) {
-    const a = (i / 10) * TAU;
-    barBetween(
-      greeneryKit,
-      M.metalDark,
-      [hx + Math.cos(a) * 0.165, basketY + 0.11, hz + Math.sin(a) * 0.165],
-      [hx + Math.cos(a) * 0.12, basketY - 0.11, hz + Math.sin(a) * 0.12],
-      0.004
-    );
-  }
-  for (let i = 0; i < 8; i++) {
-    const a = (i / 8) * TAU;
-    sphere(greeneryKit, LEAF_MATS[i % 2], 0.11, hx + Math.cos(a) * 0.13, basketY + 0.07, hz + Math.sin(a) * 0.13, { seg: 6 });
-    addFlower(greeneryKit, hx + Math.cos(a) * 0.16, basketY + 0.0, hz + Math.sin(a) * 0.16, i, 0.65);
-  }
-  // A few trailing vines soften the silhouette below the basket.
-  for (let i = 0; i < 4; i++) {
-    const a = i * 1.7 + 0.3;
-    const vine = new THREE.Mesh(
-      new THREE.TubeGeometry(new THREE.CatmullRomCurve3([
-        new THREE.Vector3(hx + Math.cos(a) * 0.13, basketY - 0.06, hz + Math.sin(a) * 0.13),
-        new THREE.Vector3(hx + Math.cos(a) * 0.16, basketY - 0.2, hz + Math.sin(a) * 0.16),
-        new THREE.Vector3(hx + Math.cos(a) * 0.14, basketY - 0.34, hz + Math.sin(a) * 0.14),
-      ]), 8, 0.004, 4, false),
-      toon(0x4d7d43, { soft: true })
-    );
-    greeneryKit.add(vine);
-    for (let leaf = 0; leaf < 2; leaf++) {
-      sphere(greeneryKit, LEAF_MATS[(i + leaf) % 2], 0.035, hx + Math.cos(a) * 0.15, basketY - 0.14 - leaf * 0.12, hz + Math.sin(a) * 0.15, { seg: 5, cast: false });
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 5) * TAU + 0.2;
+    const tuftX = bedX + Math.cos(a) * 0.33;
+    const tuftZ = bedZ + Math.sin(a) * 0.13;
+    for (let blade = 0; blade < 3; blade++) {
+      const g = new THREE.Mesh(new THREE.ConeGeometry(0.008, 0.1 + blade * 0.02, 4), toon(0x4e7c45, { soft: true }));
+      g.position.set(tuftX + (blade - 1) * 0.012, bedY + borderH + 0.045, tuftZ);
+      g.rotation.z = (blade - 1) * 0.25;
+      greeneryKit.add(g);
     }
   }
+  contactShadow(greeneryKit, bedX, bedZ, 1.08, 0.62, 0.24, bedY + 0.006);
 }
 
 const sunnyDecor = new THREE.Group();
