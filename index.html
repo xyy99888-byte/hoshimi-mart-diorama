@@ -5555,122 +5555,152 @@ const streetKit = kit('32-门口杂物', 3.55, { fromY: -0.55, scaleFrom: 0.92 }
     box(streetKit, M.metalDark, 0.07, 0.06, 0.02, b.x, SIDEWALK_TOP + 0.5, -0.42, { cast: false });
     contactShadow(streetKit, b.x, -0.58, 0.45, 0.48, 0.28, SIDEWALK_TOP + 0.006);
   });
-  // Openwork umbrella stand beside the door. The wire basket and the proper
-  // handle-up closed umbrellas are a static arrangement; there is no hit target.
+  // A finer open wire stand beside the door. The basket is intentionally
+  // empty-looking: thin rolled rims, a tapered double hoop and sixteen wires.
   const standX = -0.7;
   const standZ = -0.63;
-  const standBaseY = SIDEWALK_TOP + 0.015;
-  const standTopY = SIDEWALK_TOP + 0.49;
-  const standBottomR = 0.205;
+  const standBaseY = SIDEWALK_TOP + 0.018;
+  const standTopY = SIDEWALK_TOP + 0.51;
+  const standBottomR = 0.208;
   const standTopR = 0.19;
-  const standMetal = M.metalDark;
-  const standRim = M.metalLight;
+  const rackMetal = toon(0x4b4f49, { soft: true });
+  const rackEdge = toon(0x85887e, { soft: true });
 
-  // Three circular wire hoops, slightly tapered, plus a lattice of vertical
-  // rods. No solid bucket body, so the colored umbrella bodies stay visible.
-  [standBaseY + 0.01, SIDEWALK_TOP + 0.27, standTopY].forEach((y, ringIndex) => {
-    const radius = ringIndex === 0 ? standBottomR : ringIndex === 1 ? 0.202 : standTopR;
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(radius, ringIndex === 2 ? 0.008 : 0.006, 6, 32), ringIndex === 2 ? standRim : standMetal);
+  [0.0, 0.13, 0.26, 0.33].forEach((t, ringIndex) => {
+    const y = lerp(standBaseY, standTopY, t);
+    const radius = lerp(standBottomR, standTopR, t);
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(radius, ringIndex === 3 ? 0.0075 : ringIndex === 0 ? 0.006 : 0.0045, 6, 36),
+      ringIndex === 3 ? rackEdge : rackMetal
+    );
     ring.rotation.x = Math.PI / 2;
     ring.position.set(standX, y, standZ);
     ring.castShadow = false;
     streetKit.add(ring);
   });
-  for (let i = 0; i < 10; i++) {
-    const a = (i / 10) * TAU;
+  // A doubled top rim makes the wire basket feel manufactured instead of
+  // assembled from generic rods.
+  const topLip = new THREE.Mesh(new THREE.TorusGeometry(standTopR + 0.002, 0.0024, 4, 36), rackEdge);
+  topLip.rotation.x = Math.PI / 2;
+  topLip.position.set(standX, standTopY + 0.006, standZ);
+  streetKit.add(topLip);
+  for (let i = 0; i < 16; i++) {
+    const a = (i / 16) * TAU;
     const x0 = standX + Math.cos(a) * standBottomR;
     const z0 = standZ + Math.sin(a) * standBottomR;
     const x1 = standX + Math.cos(a) * standTopR;
     const z1 = standZ + Math.sin(a) * standTopR;
-    barBetween(streetKit, standMetal, [x0, standBaseY, z0], [x1, standTopY, z1], 0.0055);
-    // four small rubber feet
-    if (i % 3 === 0) {
-      cylinder(streetKit, M.metalLight, 0.014, 0.016, 0.025, x0, SIDEWALK_TOP + 0.012, z0, { seg: 6, cast: false });
+    barBetween(streetKit, rackMetal, [x0, standBaseY, z0], [x1, standTopY, z1], 0.0038);
+    if (i % 4 === 0) {
+      cylinder(streetKit, M.metalLight, 0.013, 0.015, 0.024, x0, SIDEWALK_TOP + 0.012, z0, { seg: 8, cast: false });
     }
   }
-  // Open cross supports at the bottom, so the basket reads as a real wire rack.
-  barBetween(streetKit, standMetal, [standX - standBottomR, standBaseY + 0.012, standZ], [standX + standBottomR, standBaseY + 0.012, standZ], 0.0045);
-  barBetween(streetKit, standMetal, [standX, standBaseY + 0.012, standZ - standBottomR], [standX, standBaseY + 0.012, standZ + standBottomR], 0.0045);
-  contactShadow(streetKit, standX, standZ, 0.48, 0.48, 0.22, SIDEWALK_TOP + 0.006);
+  // Four low cross braces under the basket.
+  barBetween(streetKit, rackMetal, [standX - standBottomR, standBaseY + 0.018, standZ], [standX + standBottomR, standBaseY + 0.018, standZ], 0.0038);
+  barBetween(streetKit, rackMetal, [standX, standBaseY + 0.018, standZ - standBottomR], [standX, standBaseY + 0.018, standZ + standBottomR], 0.0038);
+  const lowerCross = new THREE.Mesh(new THREE.TorusGeometry(0.085, 0.0035, 4, 20), rackMetal);
+  lowerCross.rotation.x = Math.PI / 2;
+  lowerCross.position.set(standX, standBaseY + 0.018, standZ);
+  streetKit.add(lowerCross);
+  contactShadow(streetKit, standX, standZ, 0.52, 0.52, 0.24, SIDEWALK_TOP + 0.006);
 
   const umbrellaColors = [0x244766, 0xa84742, 0xc7a44e, 0x42634f, 0x6d5a85];
-  const foldMap = canvasTexture(128, 128, (ctx, w, h) => {
-    ctx.fillStyle = '#f1f1ed';
+  const foldMap = canvasTexture(256, 256, (ctx, w, h) => {
+    ctx.fillStyle = '#ecece7';
     ctx.fillRect(0, 0, w, h);
-    for (let i = 0; i < 9; i++) {
-      const x = (i + 0.5) * (w / 9);
-      const grad = ctx.createLinearGradient(x - 5, 0, x + 5, 0);
-      grad.addColorStop(0, 'rgba(255,255,255,0.0)');
-      grad.addColorStop(0.45, 'rgba(44,48,45,0.20)');
-      grad.addColorStop(0.55, 'rgba(255,255,255,0.10)');
-      grad.addColorStop(1, 'rgba(255,255,255,0.0)');
+    for (let i = 0; i < 17; i++) {
+      const x = (i + 0.5) * (w / 17);
+      const grad = ctx.createLinearGradient(x - 7, 0, x + 7, 0);
+      grad.addColorStop(0, 'rgba(255,255,255,0)');
+      grad.addColorStop(0.32, 'rgba(49,52,48,0.09)');
+      grad.addColorStop(0.48, 'rgba(38,41,38,0.22)');
+      grad.addColorStop(0.58, 'rgba(255,255,255,0.17)');
+      grad.addColorStop(1, 'rgba(255,255,255,0)');
       ctx.fillStyle = grad;
-      ctx.fillRect(x - 5, 0, 10, h);
+      ctx.fillRect(x - 7, 0, 14, h);
     }
-    ctx.strokeStyle = 'rgba(76,80,76,0.18)';
-    ctx.lineWidth = 1;
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 11; i++) {
+      ctx.strokeStyle = `rgba(48,50,46,${0.06 + (i % 3) * 0.02})`;
+      ctx.lineWidth = 1.2;
       ctx.beginPath();
-      ctx.moveTo(0, 18 + i * 18);
-      ctx.lineTo(w, 24 + i * 18);
+      ctx.moveTo(0, 28 + i * 19);
+      ctx.bezierCurveTo(w * 0.3, 24 + i * 19, w * 0.7, 33 + i * 19, w, 28 + i * 19);
       ctx.stroke();
     }
   });
+  const closedCanopyProfile = [
+    new THREE.Vector2(0.0, 0.0),
+    new THREE.Vector2(0.006, 0.035),
+    new THREE.Vector2(0.017, 0.11),
+    new THREE.Vector2(0.032, 0.25),
+    new THREE.Vector2(0.046, 0.41),
+    new THREE.Vector2(0.054, 0.56),
+    new THREE.Vector2(0.055, 0.64),
+    new THREE.Vector2(0.049, 0.70),
+    new THREE.Vector2(0.034, 0.745),
+    new THREE.Vector2(0.018, 0.774),
+    new THREE.Vector2(0.011, 0.786),
+  ];
+  const closedCanopyGeometry = new THREE.LatheGeometry(closedCanopyProfile, 24);
   const handleCurve = new THREE.CatmullRomCurve3([
-    new THREE.Vector3(0, 1.115, 0),
-    new THREE.Vector3(0, 1.19, 0),
-    new THREE.Vector3(0.012, 1.245, 0),
-    new THREE.Vector3(0.060, 1.272, 0),
-    new THREE.Vector3(0.108, 1.245, 0),
-    new THREE.Vector3(0.118, 1.205, 0),
+    new THREE.Vector3(0, 1.145, 0),
+    new THREE.Vector3(0, 1.205, 0),
+    new THREE.Vector3(0.01, 1.247, 0),
+    new THREE.Vector3(0.044, 1.268, 0),
+    new THREE.Vector3(0.078, 1.247, 0),
+    new THREE.Vector3(0.087, 1.216, 0),
   ]);
-  const handleGeometry = new THREE.TubeGeometry(handleCurve, 18, 0.014, 6, false);
-  const handleMaterial = toon(0x3c2c22, { soft: true });
+  const handleGeometry = new THREE.TubeGeometry(handleCurve, 22, 0.0105, 7, false);
+  const handleMaterial = toon(0x453226, { soft: true });
+  const handleCapMaterial = toon(0x2c2018, { soft: true });
+  const tieMaterial = toon(0xd4c5a7, { soft: true });
+  const ferruleMaterial = toon(0x5b5d57, { soft: true });
   umbrellaColors.forEach((c, i) => {
     const a = (i / umbrellaColors.length) * TAU + 0.2;
-    const bx = standX + Math.cos(a) * 0.06;
-    const bz = standZ + Math.sin(a) * 0.06;
+    const bx = standX + Math.cos(a) * 0.058;
+    const bz = standZ + Math.sin(a) * 0.058;
     const group = new THREE.Group();
     group.position.set(bx, SIDEWALK_TOP, bz);
-    group.rotation.z = -Math.cos(a) * 0.15;
-    group.rotation.x = Math.sin(a) * 0.15;
+    group.rotation.z = -Math.cos(a) * 0.14;
+    group.rotation.x = Math.sin(a) * 0.14;
     streetKit.add(group);
 
-    // Tip-down umbrella: the handle is above the canopy, as in a real
-    // handle-up umbrella resting in a stand.
-    cylinder(group, M.metalDark, 0.009, 0.012, 1.04, 0, 0.62, 0, { seg: 6, cast: false });
-    cylinder(group, M.metalDark, 0.008, 0.015, 0.10, 0, 0.14, 0, { seg: 6, cast: false });
-    const ferrule = new THREE.Mesh(new THREE.ConeGeometry(0.013, 0.065, 8), M.metalDark);
-    ferrule.position.y = 0.10;
+    // Slim shaft, small ferrule and a rounded, gathered canopy. The old
+    // open cone has been replaced with a lathed sheath profile.
+    cylinder(group, M.metalDark, 0.0075, 0.010, 1.07, 0, 0.62, 0, { seg: 8, cast: false });
+    const ferrule = new THREE.Mesh(new THREE.ConeGeometry(0.012, 0.075, 10), ferruleMaterial);
+    ferrule.position.y = 0.105;
     ferrule.rotation.z = Math.PI;
     group.add(ferrule);
+    const collar = new THREE.Mesh(new THREE.TorusGeometry(0.014, 0.003, 5, 12), M.metalLight);
+    collar.rotation.x = Math.PI / 2;
+    collar.position.y = 1.145;
+    group.add(collar);
 
     const canopy = new THREE.Mesh(
-      new THREE.ConeGeometry(0.078, 0.58, 10, 1, false),
+      closedCanopyGeometry,
       toon(c, { map: foldMap, side: THREE.DoubleSide })
     );
-    canopy.rotation.z = Math.PI;
-    canopy.position.y = 0.44;
+    canopy.position.y = 0.14;
     canopy.castShadow = true;
     group.add(canopy);
 
-    const runner = new THREE.Mesh(new THREE.TorusGeometry(0.038, 0.006, 5, 12), M.metalLight);
+    const runner = new THREE.Mesh(new THREE.TorusGeometry(0.016, 0.004, 5, 14), M.metalLight);
     runner.rotation.x = Math.PI / 2;
-    runner.position.y = 0.726;
+    runner.position.y = 0.925;
     group.add(runner);
-    const canopyTop = new THREE.Mesh(new THREE.SphereGeometry(0.052, 9, 6), toon(c, { soft: true }));
-    canopyTop.scale.set(1.0, 0.22, 1.0);
-    canopyTop.position.y = 0.733;
-    group.add(canopyTop);
-    const tie = new THREE.Mesh(new THREE.TorusGeometry(0.031, 0.005, 5, 12), toon(0xd9ccb3, { soft: true }));
+    const tie = new THREE.Mesh(new THREE.TorusGeometry(0.052, 0.0055, 5, 18), tieMaterial);
     tie.rotation.x = Math.PI / 2;
-    tie.position.y = 0.32;
+    tie.position.y = 0.43;
     group.add(tie);
+    const buckle = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.012, 0.008), toon(0x8e7a5b, { soft: true }));
+    buckle.position.set(0.045, 0.43, 0.016);
+    group.add(buckle);
 
     const handle = new THREE.Mesh(handleGeometry, handleMaterial);
     group.add(handle);
-    const handleEnd = new THREE.Mesh(new THREE.SphereGeometry(0.016, 7, 5), handleMaterial);
-    handleEnd.position.set(0.118, 1.205, 0);
+    const handleEnd = new THREE.Mesh(new THREE.SphereGeometry(0.012, 8, 6), handleCapMaterial);
+    handleEnd.position.set(0.087, 1.216, 0);
     group.add(handleEnd);
   });
   // wet floor sign near door
@@ -9905,100 +9935,198 @@ detailDecal(detailRain, detailStainMap, 0.34, 0.8, 0.02, 0.58, -0.936, 0, 0.34, 
   detailDecal(detailRain, detailStainMap, 0.24, 0.24, x, 0.2, -0.414, 0, 0.35, 0x6d929a);
 });
 
-// A small calico cat curled up asleep beside the bicycle. It is a quiet,
-// non-interactive focal point rather than another hit target.
+// A small calico cat curled up asleep on a small outdoor cushion beside the
+// bicycle. It is a quiet, non-interactive focal point.
 const catGroup = new THREE.Group();
 catGroup.position.set(2.94, SIDEWALK_TOP, -1.18);
 catGroup.rotation.y = -0.38;
 world.add(catGroup);
-const catState = { time: 0, body: null, tail: null };
+const catState = { time: 0, body: null, tail: null, head: null };
 {
-  const cream = toon(0xd8c6aa, { soft: true });
-  const rust = toon(0xb46b42, { soft: true });
-  const dark = toon(0x3e3731, { soft: true });
-  const pink = toon(0xe9a8a8, { soft: true });
-  const body = new THREE.Mesh(new THREE.SphereGeometry(0.12, 12, 9), cream);
-  body.scale.set(1.3, 0.52, 1.05);
-  body.position.set(0, 0.075, 0);
+  // A soft, faded cushion makes the sleeping pose read immediately.
+  const cushionMap = canvasTexture(256, 256, (ctx, w, h) => {
+    ctx.fillStyle = '#c8b9a1';
+    ctx.fillRect(0, 0, w, h);
+    for (let i = 0; i < 8; i++) {
+      ctx.fillStyle = i % 2 ? 'rgba(120,108,88,0.22)' : 'rgba(240,231,212,0.18)';
+      ctx.fillRect(0, i * 32, w, 14);
+    }
+    for (let i = 0; i < 18; i++) {
+      ctx.strokeStyle = `rgba(92,84,70,${0.05 + Math.random() * 0.08})`;
+      ctx.beginPath();
+      ctx.moveTo(0, Math.random() * h);
+      ctx.lineTo(w, Math.random() * h);
+      ctx.stroke();
+    }
+  });
+  const cushion = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.17, 0.185, 0.045, 28),
+    toon(0xffffff, { map: cushionMap, soft: true })
+  );
+  cushion.scale.z = 0.82;
+  cushion.position.y = 0.024;
+  catGroup.add(cushion);
+  const cushionRim = new THREE.Mesh(
+    new THREE.TorusGeometry(0.168, 0.017, 8, 28),
+    toon(0x9d8e79, { soft: true })
+  );
+  cushionRim.rotation.x = Math.PI / 2;
+  cushionRim.scale.set(1, 0.82, 1);
+  cushionRim.position.y = 0.045;
+  catGroup.add(cushionRim);
+
+  const furMap = canvasTexture(256, 256, (ctx, w, h) => {
+    ctx.fillStyle = '#d9c8ae';
+    ctx.fillRect(0, 0, w, h);
+    // Fine warm fur strokes.
+    for (let i = 0; i < 480; i++) {
+      const x = Math.random() * w;
+      const y = Math.random() * h;
+      ctx.strokeStyle = `rgba(${Math.random() < 0.55 ? '246,236,216' : '92,76,60'},${0.035 + Math.random() * 0.05})`;
+      ctx.lineWidth = 0.7;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + (Math.random() - 0.5) * 7, y + Math.random() * 8);
+      ctx.stroke();
+    }
+    // Soft calico patches, not hard-edged decals.
+    const patches = [
+      [66, 52, 38, 26, '#a9633d'],
+      [190, 66, 45, 30, '#4b3b31'],
+      [144, 190, 35, 24, '#b8774b'],
+      [225, 205, 28, 18, '#4b3b31'],
+      [30, 180, 24, 18, '#b8774b'],
+    ];
+    patches.forEach(([x, y, rx, ry, color]) => {
+      ctx.fillStyle = color;
+      ctx.globalAlpha = 0.9;
+      ctx.beginPath();
+      ctx.ellipse(x, y, rx, ry, Math.random() * 0.8, 0, TAU);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    });
+    // Blend the patch edges with a few tiny fur clumps.
+    for (let i = 0; i < 26; i++) {
+      ctx.fillStyle = `rgba(217,200,174,${0.18 + Math.random() * 0.18})`;
+      ctx.beginPath();
+      ctx.arc(Math.random() * w, Math.random() * h, 2 + Math.random() * 7, 0, TAU);
+      ctx.fill();
+    }
+  });
+  const furMat = toon(0xffffff, { map: furMap, soft: true });
+  const cream = toon(0xe1d2b9, { soft: true });
+  const rust = toon(0xa9633d, { soft: true });
+  const dark = toon(0x3b332d, { soft: true });
+  const pink = toon(0xe6a6a4, { soft: true });
+
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.12, 22, 16), furMat);
+  body.scale.set(1.34, 0.6, 1.12);
+  body.position.set(0, 0.095, 0);
   catGroup.add(body);
+  addOutline(body, 0.016);
   catState.body = body;
-  const haunch = new THREE.Mesh(new THREE.SphereGeometry(0.085, 10, 8), cream);
-  haunch.scale.set(1.1, 0.85, 1.1);
-  haunch.position.set(-0.065, 0.07, -0.025);
+
+  const haunch = new THREE.Mesh(new THREE.SphereGeometry(0.086, 16, 12), furMat);
+  haunch.scale.set(1.12, 0.88, 1.12);
+  haunch.position.set(-0.065, 0.085, -0.035);
   catGroup.add(haunch);
-  // Head settles low and rests against the tucked front paws.
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.075, 12, 9), cream);
-  head.scale.set(1.0, 0.9, 0.95);
-  head.position.set(0.072, 0.098, 0.16);
-  head.rotation.z = -0.24;
+  addOutline(haunch, 0.018);
+
+  const neck = new THREE.Mesh(new THREE.SphereGeometry(0.06, 14, 10), furMat);
+  neck.scale.set(1.0, 0.9, 0.9);
+  neck.position.set(0.045, 0.1, 0.095);
+  catGroup.add(neck);
+  addOutline(neck, 0.018);
+
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.072, 20, 14), furMat);
+  head.scale.set(1.0, 0.88, 0.96);
+  head.position.set(0.072, 0.108, 0.155);
+  head.rotation.z = -0.22;
   catGroup.add(head);
-  const muzzle = new THREE.Mesh(new THREE.SphereGeometry(0.032, 8, 6), cream);
-  muzzle.scale.set(1.1, 0.62, 0.85);
-  muzzle.position.set(0.078, 0.072, 0.218);
+  addOutline(head, 0.018);
+  catState.head = head;
+
+  const muzzle = new THREE.Mesh(new THREE.SphereGeometry(0.031, 10, 7), cream);
+  muzzle.scale.set(1.12, 0.62, 0.9);
+  muzzle.position.set(0.078, 0.079, 0.213);
   catGroup.add(muzzle);
   [-1, 1].forEach((side) => {
-    const ear = new THREE.Mesh(new THREE.ConeGeometry(0.03, 0.062, 4), side > 0 ? rust : cream);
-    ear.position.set(0.072 + side * 0.039, 0.146, 0.135);
-    ear.rotation.z = side * 0.48;
+    const ear = new THREE.Mesh(new THREE.ConeGeometry(0.031, 0.064, 4), side > 0 ? rust : cream);
+    ear.position.set(0.072 + side * 0.039, 0.152, 0.132);
+    ear.rotation.z = side * 0.45;
     catGroup.add(ear);
-    const inner = new THREE.Mesh(new THREE.ConeGeometry(0.015, 0.035, 4), pink);
-    inner.position.set(0.072 + side * 0.039, 0.146, 0.148);
-    inner.rotation.z = side * 0.48;
+    const inner = new THREE.Mesh(new THREE.ConeGeometry(0.015, 0.036, 4), pink);
+    inner.position.set(0.072 + side * 0.039, 0.152, 0.144);
+    inner.rotation.z = side * 0.45;
     catGroup.add(inner);
-    const eye = new THREE.Mesh(new THREE.BoxGeometry(0.021, 0.0045, 0.003), dark);
-    eye.position.set(0.072 + side * 0.023, 0.106, 0.222);
-    eye.rotation.z = side * -0.06;
+    const eye = new THREE.Mesh(new THREE.TorusGeometry(0.009, 0.0018, 3, 8, Math.PI), dark);
+    eye.rotation.x = Math.PI / 2;
+    eye.rotation.z = side * -0.1;
+    eye.position.set(0.072 + side * 0.024, 0.112, 0.218);
     catGroup.add(eye);
   });
-  const nose = new THREE.Mesh(new THREE.SphereGeometry(0.008, 7, 5), pink);
-  nose.scale.set(1.2, 0.7, 0.7);
-  nose.position.set(0.078, 0.075, 0.243);
+  const nose = new THREE.Mesh(new THREE.SphereGeometry(0.0075, 7, 5), pink);
+  nose.scale.set(1.15, 0.7, 0.7);
+  nose.position.set(0.078, 0.081, 0.238);
   catGroup.add(nose);
-  // Calico patches on the curled top surface.
-  [[-0.05, 0.132, -0.03, 0.052], [0.045, 0.132, -0.07, 0.043], [-0.02, 0.128, 0.06, 0.037], [0.075, 0.145, 0.105, 0.028]].forEach(([x, y, z, s], i) => {
-    const patch = new THREE.Mesh(new THREE.SphereGeometry(s, 8, 6), i % 2 ? rust : dark);
-    patch.scale.set(1.2, 0.18, 1.0);
-    patch.rotation.y = i * 0.7;
-    patch.position.set(x, y, z);
-    catGroup.add(patch);
+  // Whiskers: thin, pale lines that catch the light around the muzzle.
+  const whiskerPositions = [];
+  [-1, 1].forEach((side) => {
+    for (let w = 0; w < 3; w++) {
+      whiskerPositions.push(
+        0.078 + side * 0.02, 0.081 + w * 0.004, 0.23,
+        0.078 + side * (0.1 + w * 0.006), 0.075 + (w - 1) * 0.018, 0.21 + w * 0.008
+      );
+    }
   });
-  // Front paws are tucked under the chin; back paw curls into the flank.
-  [[0.035, 0.035, 0.19], [0.105, 0.035, 0.185]].forEach(([x, y, z]) => {
-    const paw = new THREE.Mesh(new THREE.SphereGeometry(0.025, 7, 5), cream);
-    paw.scale.set(1.1, 0.5, 1.25);
+  const whiskerGeo = new THREE.BufferGeometry();
+  whiskerGeo.setAttribute('position', new THREE.Float32BufferAttribute(whiskerPositions, 3));
+  const whisker = new THREE.LineSegments(whiskerGeo, new THREE.LineBasicMaterial({ color: 0xece1c8, transparent: true, opacity: 0.65 }));
+  catGroup.add(whisker);
+
+  // Tucked paws with tiny toe creases.
+  [[0.035, 0.042, 0.19], [0.108, 0.042, 0.185]].forEach(([x, y, z], pawIndex) => {
+    const paw = new THREE.Mesh(new THREE.SphereGeometry(0.027, 10, 7), cream);
+    paw.scale.set(1.1, 0.5, 1.35);
     paw.position.set(x, y, z);
     catGroup.add(paw);
+    for (let toe = -1; toe <= 1; toe++) {
+      const line = new THREE.Mesh(new THREE.BoxGeometry(0.003, 0.003, 0.021), toon(0xb9a78d));
+      line.position.set(x + toe * 0.009, y + 0.014, z + 0.026);
+      line.rotation.x = Math.PI / 2;
+      catGroup.add(line);
+    }
   });
-  const backPaw = new THREE.Mesh(new THREE.SphereGeometry(0.028, 7, 5), cream);
-  backPaw.scale.set(1.1, 0.5, 1.3);
-  backPaw.position.set(-0.135, 0.035, 0.01);
+  const backPaw = new THREE.Mesh(new THREE.SphereGeometry(0.028, 10, 7), cream);
+  backPaw.scale.set(1.1, 0.5, 1.35);
+  backPaw.position.set(-0.137, 0.042, 0.015);
   catGroup.add(backPaw);
-  // Tail wraps around the curled body and ends near the nose.
+
+  // Tail curls around the cushion, ending near the nose.
   const tailPivot = new THREE.Group();
   catGroup.add(tailPivot);
   const tailCurve = new THREE.CatmullRomCurve3([
-    new THREE.Vector3(-0.04, 0.04, -0.125),
-    new THREE.Vector3(-0.15, 0.042, -0.06),
-    new THREE.Vector3(-0.16, 0.04, 0.035),
-    new THREE.Vector3(-0.09, 0.038, 0.12),
-    new THREE.Vector3(0.01, 0.034, 0.19),
-    new THREE.Vector3(0.105, 0.032, 0.17),
+    new THREE.Vector3(-0.03, 0.05, -0.13),
+    new THREE.Vector3(-0.16, 0.052, -0.06),
+    new THREE.Vector3(-0.17, 0.05, 0.05),
+    new THREE.Vector3(-0.1, 0.046, 0.14),
+    new THREE.Vector3(0.01, 0.042, 0.19),
+    new THREE.Vector3(0.12, 0.04, 0.175),
   ]);
-  const tail = new THREE.Mesh(new THREE.TubeGeometry(tailCurve, 20, 0.0125, 5, false), rust);
+  const tail = new THREE.Mesh(new THREE.TubeGeometry(tailCurve, 28, 0.0135, 6, false), rust);
   tailPivot.add(tail);
-  const tailTip = new THREE.Mesh(new THREE.SphereGeometry(0.014, 7, 5), dark);
-  tailTip.position.set(0.105, 0.032, 0.17);
+  const tailTip = new THREE.Mesh(new THREE.SphereGeometry(0.015, 8, 6), dark);
+  tailTip.position.set(0.12, 0.04, 0.175);
   tailPivot.add(tailTip);
   catState.tail = tailPivot;
-  contactShadow(catGroup, 0.01, 0.01, 0.46, 0.4, 0.22, 0.006);
+  contactShadow(catGroup, 0.01, 0.01, 0.52, 0.46, 0.24, 0.006);
 }
 function updateCat(dt, t) {
   catState.time += dt;
-  const breath = 1 + Math.sin(catState.time * 1.45) * 0.009;
-  if (catState.body) catState.body.scale.set(1.3 * breath, 0.52 * breath, 1.05);
-  if (catState.tail) {
-    catState.tail.rotation.y = Math.sin(t * 0.33) * 0.012;
-  }
+  const breath = 1 + Math.sin(catState.time * 1.35) * 0.009;
+  if (catState.body) catState.body.scale.set(1.34 * breath, 0.6 * breath, 1.12);
+  if (catState.head) catState.head.position.y = 0.108 + Math.sin(catState.time * 1.35 + 0.5) * 0.0025;
+  if (catState.tail) catState.tail.rotation.y = Math.sin(t * 0.28) * 0.012;
 }
 
 // Cherry petals drifting in sunny weather (single Points draw call).
@@ -10131,57 +10259,135 @@ const deliveryCrate = new THREE.Group();
 deliveryCrate.position.set(2.62, SIDEWALK_TOP, -3.36);
 detailCommon.add(deliveryCrate);
 {
-  const crateMat = toon(0x5d746b, { soft: true });
-  box(deliveryCrate, crateMat, 0.31, 0.22, 0.27, 0, 0.11, 0, { outline: 0.004 });
-  for (let i = 0; i < 3; i++) {
-    box(deliveryCrate, M.metalLight, 0.25, 0.012, 0.29, 0, 0.035 + i * 0.07, 0, { cast: false });
-  }
-  const bottleColors = [0x5b8b8b, 0xb9d5d0, 0xd7c49b, 0x9b5a4e];
-  bottleColors.forEach((c, i) => {
-    cylinder(deliveryCrate, toon(c, { soft: true }), 0.018, 0.018, 0.13, -0.09 + i * 0.06, 0.235, (i % 2) * 0.04 - 0.02, { seg: 7, cast: false });
+  const crateMat = toon(0x56716a, { soft: true });
+  const crateDark = toon(0x3e544f, { soft: true });
+  // Open-top delivery crate with a slatted body, not a solid box.
+  box(deliveryCrate, crateMat, 0.34, 0.026, 0.29, 0, 0.018, 0, { outline: 0.004 });
+  [-1, 1].forEach((sx) => {
+    [-1, 1].forEach((sz) => {
+      box(deliveryCrate, crateMat, 0.024, 0.25, 0.024, sx * 0.158, 0.14, sz * 0.133, { cast: false });
+    });
   });
-  contactShadow(detailCommon, 2.62, -3.36, 0.62, 0.58, 0.2, SIDEWALK_TOP + 0.006);
+  [0.06, 0.13, 0.2, 0.255].forEach((y) => {
+    [-1, 1].forEach((sz) => {
+      box(deliveryCrate, crateMat, 0.31, 0.022, 0.012, 0, y, sz * 0.142, { cast: false });
+    });
+    [-1, 1].forEach((sx) => {
+      box(deliveryCrate, crateMat, 0.012, 0.022, 0.255, sx * 0.166, y, 0, { cast: false });
+    });
+  });
+  // Handles on the end panels.
+  [-1, 1].forEach((sz) => {
+    box(deliveryCrate, crateDark, 0.08, 0.022, 0.025, 0, 0.215, sz * 0.15, { cast: false });
+  });
+  const bottleColors = [0x6e9b95, 0xc4ddd6, 0xd6bd8d, 0xa75e4c];
+  bottleColors.forEach((c, i) => {
+    const x = -0.1 + i * 0.067;
+    const z = (i % 2) * 0.055 - 0.027;
+    cylinder(deliveryCrate, toon(c, { soft: true }), 0.020, 0.019, 0.135, x, 0.215, z, { seg: 10, cast: false });
+    cylinder(deliveryCrate, toon(c, { soft: true }), 0.010, 0.019, 0.027, x, 0.294, z, { seg: 10, cast: false });
+    cylinder(deliveryCrate, M.wallCream, 0.0205, 0.0205, 0.034, x, 0.22, z, { seg: 10, cast: false });
+    cylinder(deliveryCrate, M.metalLight, 0.008, 0.008, 0.012, x, 0.31, z, { seg: 8, cast: false });
+  });
+  contactShadow(detailCommon, 2.62, -3.36, 0.64, 0.6, 0.22, SIDEWALK_TOP + 0.006);
 }
+const newsPaperMap = canvasTexture(256, 180, (ctx, w, h) => {
+  ctx.fillStyle = '#e8e2d3';
+  ctx.fillRect(0, 0, w, h);
+  ctx.fillStyle = '#625f56';
+  ctx.font = 'bold 17px serif';
+  ctx.textAlign = 'left';
+  ctx.fillText('星見町新聞', 12, 24);
+  ctx.strokeStyle = 'rgba(85,82,73,0.4)';
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(12, 31); ctx.lineTo(w - 12, 31); ctx.stroke();
+  ctx.fillStyle = 'rgba(73,71,63,0.36)';
+  for (let col = 0; col < 3; col++) {
+    for (let i = 0; i < 14; i++) {
+      const x = 14 + col * 78;
+      const y = 47 + i * 8;
+      ctx.fillRect(x, y, 48 + ((i + col) % 3) * 8, 2.4);
+    }
+  }
+});
 const paperStack = new THREE.Group();
-paperStack.position.set(-0.36, SIDEWALK_TOP, -0.79);
+paperStack.position.set(-1.0, SIDEWALK_TOP, -0.84);
 detailCommon.add(paperStack);
 {
-  const paperMat = toon(0xd7d1bd, { soft: true });
-  for (let i = 0; i < 4; i++) {
-    box(paperStack, i === 3 ? toon(0xc9c1ac, { soft: true }) : paperMat, 0.23, 0.012, 0.3, i * 0.007, 0.007 + i * 0.013, 0, {
-      ry: 0.08 * (i % 2),
+  const paperMat = toon(0xd9d2c0, { soft: true });
+  const paperEdge = toon(0xc2b9a5, { soft: true });
+  for (let i = 0; i < 6; i++) {
+    box(paperStack, i === 5 ? paperMat : paperEdge, 0.23, 0.010, 0.31, i * 0.004, 0.007 + i * 0.0105, 0, {
+      ry: 0.035 * (i % 3 - 1),
       cast: false,
     });
   }
-  contactShadow(detailCommon, -0.36, -0.79, 0.38, 0.42, 0.2, SIDEWALK_TOP + 0.006);
+  const topSheet = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.215, 0.29),
+    toon(0xffffff, { map: newsPaperMap, soft: true })
+  );
+  topSheet.rotation.x = -Math.PI / 2;
+  topSheet.rotation.z = -0.04;
+  topSheet.position.set(0.002, 0.078, 0);
+  paperStack.add(topSheet);
+  // A loose sheet lifted by the wind.
+  const loose = new THREE.Mesh(new THREE.PlaneGeometry(0.15, 0.2), toon(0xffffff, { map: newsPaperMap, soft: true }));
+  loose.rotation.x = -Math.PI / 2 + 0.16;
+  loose.rotation.z = 0.3;
+  loose.position.set(0.15, 0.075, 0.18);
+  paperStack.add(loose);
+  contactShadow(detailCommon, -1.0, -0.84, 0.38, 0.42, 0.2, SIDEWALK_TOP + 0.006);
 }
 const droppedGlove = new THREE.Group();
 droppedGlove.position.set(3.3, SIDEWALK_TOP + 0.012, -0.2);
-droppedGlove.rotation.y = -0.6;
+droppedGlove.rotation.set(0.12, -0.6, 0.3);
 detailCommon.add(droppedGlove);
 {
-  const gloveMat = toon(0x574237, { soft: true });
-  const gloveBody = new THREE.Mesh(new THREE.SphereGeometry(0.028, 8, 6), gloveMat);
-  gloveBody.scale.set(0.75, 0.35, 1.5);
-  gloveBody.position.y = 0.012;
-  droppedGlove.add(gloveBody);
-  const thumb = new THREE.Mesh(new THREE.SphereGeometry(0.014, 6, 5), gloveMat);
-  thumb.scale.set(0.7, 0.5, 1.1);
-  thumb.position.set(0.025, 0.01, 0.008);
+  const gloveMat = toon(0x5a4134, { soft: true });
+  const gloveDark = toon(0x3f2d25, { soft: true });
+  const palm = new THREE.Mesh(new THREE.SphereGeometry(0.033, 10, 8), gloveMat);
+  palm.scale.set(1.15, 0.42, 1.4);
+  palm.position.y = 0.012;
+  droppedGlove.add(palm);
+  for (let f = 0; f < 4; f++) {
+    const finger = new THREE.Mesh(new THREE.SphereGeometry(0.0105, 7, 5), gloveMat);
+    finger.scale.set(0.78, 0.5, 2.4);
+    finger.position.set(-0.027 + f * 0.018, 0.008, 0.064 - Math.abs(f - 1.5) * 0.003);
+    finger.rotation.y = (f - 1.5) * 0.09;
+    droppedGlove.add(finger);
+  }
+  const thumb = new THREE.Mesh(new THREE.SphereGeometry(0.013, 7, 5), gloveMat);
+  thumb.scale.set(0.8, 0.55, 1.7);
+  thumb.rotation.z = 0.8;
+  thumb.position.set(0.039, 0.011, 0.022);
   droppedGlove.add(thumb);
-  contactShadow(detailCommon, 3.3, -0.2, 0.22, 0.3, 0.16, SIDEWALK_TOP + 0.007);
+  const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.036, 0.035, 10), gloveDark);
+  cuff.rotation.x = Math.PI / 2;
+  cuff.position.set(0, 0.015, -0.048);
+  droppedGlove.add(cuff);
+  contactShadow(detailCommon, 3.3, -0.2, 0.24, 0.32, 0.16, SIDEWALK_TOP + 0.007);
 }
 contactShadow(detailCommon, -3.95, -0.5, 0.95, 0.38, 0.18, SIDEWALK_TOP + 0.006);
 contactShadow(detailCommon, -2.1, -0.5, 0.95, 0.38, 0.18, SIDEWALK_TOP + 0.006);
 
 // A few dry paper scraps skitter along the pavement in the unified wind.
 const SCRAP_COUNT = 6;
-const scrapGeometry = new THREE.PlaneGeometry(0.06, 0.042);
+const scrapGeometry = new THREE.PlaneGeometry(0.075, 0.052, 4, 3);
+{
+  const p = scrapGeometry.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i);
+    const y = p.getY(i);
+    p.setZ(i, Math.sin(x * 34) * 0.006 + Math.cos(y * 28) * 0.004);
+  }
+  scrapGeometry.computeVertexNormals();
+}
 const scrapMaterial = new THREE.MeshBasicMaterial({
-  color: 0xdfd5bf,
+  map: newsPaperMap,
+  color: 0xffffff,
   side: THREE.DoubleSide,
   transparent: true,
-  opacity: 0.9,
+  opacity: 0.92,
 });
 const scrapMesh = new THREE.InstancedMesh(scrapGeometry, scrapMaterial, SCRAP_COUNT);
 scrapMesh.frustumCulled = false;
@@ -10213,7 +10419,33 @@ function updateWindScraps(dt, t, wind) {
   scrapMesh.instanceMatrix.needsUpdate = true;
 }
 
-// Rain impact rings and a row of drips off the entrance canopy.
+// Rain impact rings, a small crown of droplets, and a row of teardrop-shaped
+// drips falling from the entrance canopy.
+const rainSplashMap = canvasTexture(128, 128, (ctx, w, h) => {
+  ctx.clearRect(0, 0, w, h);
+  const cx = w / 2;
+  const cy = h / 2;
+  for (let r = 0; r < 3; r++) {
+    ctx.strokeStyle = `rgba(208,244,252,${0.5 - r * 0.1})`;
+    ctx.lineWidth = 2.8 - r * 0.55;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, 12 + r * 12, 7 + r * 7, 0, 0, TAU);
+    ctx.stroke();
+  }
+  // Crown droplets.
+  for (let i = 0; i < 9; i++) {
+    const a = (i / 9) * TAU;
+    const rr = 26 + (i % 3) * 7;
+    ctx.fillStyle = `rgba(220,249,255,${0.55 + (i % 3) * 0.1})`;
+    ctx.beginPath();
+    ctx.arc(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr * 0.68, 2.0 + (i % 2) * 1.2, 0, TAU);
+    ctx.fill();
+  }
+  ctx.fillStyle = 'rgba(240,253,255,0.65)';
+  ctx.beginPath();
+  ctx.arc(cx, cy, 5, 0, TAU);
+  ctx.fill();
+});
 const rainSplashRecords = [];
 const splashSpots = [
   [-4.1, 0.7, 0.181], [-2.7, 1.2, 0.181], [-1.2, 0.65, 0.181],
@@ -10222,33 +10454,51 @@ const splashSpots = [
 ];
 splashSpots.forEach(([x, z, y], i) => {
   const mat = new THREE.MeshBasicMaterial({
-    color: 0xa9d8e3,
+    map: rainSplashMap,
+    color: 0xc8ecf2,
     transparent: true,
     opacity: 0,
     depthWrite: false,
     blending: THREE.AdditiveBlending,
     side: THREE.DoubleSide,
   });
-  const ring = new THREE.Mesh(new THREE.RingGeometry(0.012, 0.028, 8), mat);
-  ring.rotation.x = -Math.PI / 2;
-  ring.position.set(x, y + 0.003, z);
-  ring.renderOrder = 4;
-  detailRain.add(ring);
-  rainSplashRecords.push({ mesh: ring, mat, x, z, y, t: Math.random(), dur: 0.6 + Math.random() * 0.35, phase: i });
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.23, 0.23), mat);
+  mesh.rotation.x = -Math.PI / 2;
+  mesh.position.set(x, y + 0.003, z);
+  mesh.renderOrder = 4;
+  detailRain.add(mesh);
+  rainSplashRecords.push({ mesh, mat, x, z, y, t: Math.random(), dur: 0.6 + Math.random() * 0.35, phase: i });
 });
 const eaveDripRecords = [];
 [-4.05, -2.7, -1.25, 0.25, 0.85].forEach((x, i) => {
   const mat = new THREE.MeshBasicMaterial({
-    color: 0xb8dfe7,
+    color: 0xc2eaf1,
     transparent: true,
-    opacity: 0.58,
+    opacity: 0.72,
     depthWrite: false,
     blending: THREE.AdditiveBlending,
   });
-  const drop = new THREE.Mesh(new THREE.CylinderGeometry(0.005, 0.009, 0.16, 5), mat);
+  const drop = new THREE.Mesh(new THREE.SphereGeometry(0.014, 8, 6), mat);
+  drop.scale.set(0.7, 2.4, 0.7);
   drop.position.set(x, 2.7 - (i % 3) * 0.35, -0.87);
   detailRain.add(drop);
-  eaveDripRecords.push({ mesh: drop, mat, x, z: -0.87, y: drop.position.y, speed: 1.9 + (i % 2) * 0.4 });
+  const impactMat = new THREE.MeshBasicMaterial({
+    map: rainSplashMap,
+    color: 0xc8ecf2,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    side: THREE.DoubleSide,
+  });
+  const impact = new THREE.Mesh(new THREE.PlaneGeometry(0.18, 0.18), impactMat);
+  impact.rotation.x = -Math.PI / 2;
+  impact.position.set(x, 0.181, -0.87);
+  detailRain.add(impact);
+  eaveDripRecords.push({
+    mesh: drop, mat, impact, impactMat, x, z: -0.87, y: drop.position.y,
+    speed: 1.9 + (i % 2) * 0.4, splashT: 1,
+  });
 });
 function updateRainEffects(dt, t) {
   rainSplashRecords.forEach((record) => {
@@ -10259,71 +10509,131 @@ function updateRainEffects(dt, t) {
       record.z = 0.2 + Math.random() * 3.4;
       record.y = record.z > 2.0 ? 0.057 : 0.181;
     }
-    const scale = 0.4 + record.t * 2.2;
+    const scale = 0.55 + record.t * 1.8;
     record.mesh.position.set(record.x, record.y + 0.003, record.z);
     record.mesh.scale.setScalar(scale);
-    record.mat.opacity = Math.sin(record.t * Math.PI) * 0.2;
+    record.mat.opacity = Math.sin(record.t * Math.PI) * 0.88;
   });
   eaveDripRecords.forEach((record) => {
     record.mesh.position.y -= dt * record.speed;
     if (record.mesh.position.y < 0.18) {
       record.mesh.position.y = 2.72;
       record.mesh.position.x = record.x + (Math.random() - 0.5) * 0.08;
+      record.splashT = 0;
     }
-    record.mat.opacity = 0.42 + Math.sin(t * 4.0 + record.x) * 0.15;
+    record.mat.opacity = 0.5 + Math.sin(t * 4.0 + record.x) * 0.14;
+    record.splashT = Math.min(1, record.splashT + dt * 2.2);
+    const impactScale = 0.4 + record.splashT * 1.2;
+    record.impact.position.x = record.mesh.position.x;
+    record.impact.scale.setScalar(impactScale);
+    record.impactMat.opacity = Math.sin(record.splashT * Math.PI) * 0.75;
   });
 }
 
-// Small, non-interactive sparrow on the guardrail.
+// A small house sparrow perched on the guardrail. It is decorative and
+// responds only to the ambient wind, not to clicks.
 const sparrowGroup = new THREE.Group();
-sparrowGroup.position.set(2.18, SIDEWALK_TOP + 0.92, 5.44);
+sparrowGroup.position.set(2.18, SIDEWALK_TOP + 0.89, 5.44);
 sparrowGroup.rotation.y = 0.42;
-sparrowGroup.scale.setScalar(1.25);
+sparrowGroup.scale.setScalar(1.45);
 world.add(sparrowGroup);
-const sparrowState = { time: 0, head: null, baseY: sparrowGroup.position.y };
+const sparrowState = { time: 0, head: null, tail: null, baseY: sparrowGroup.position.y };
 {
-  const brown = toon(0x80664d, { soft: true });
+  const featherMap = canvasTexture(128, 128, (ctx, w, h) => {
+    ctx.fillStyle = '#8a7054';
+    ctx.fillRect(0, 0, w, h);
+    for (let i = 0; i < 220; i++) {
+      ctx.strokeStyle = `rgba(${Math.random() < 0.5 ? '205,188,160' : '54,44,36'},${0.06 + Math.random() * 0.1})`;
+      ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      const x = Math.random() * w;
+      const y = Math.random() * h;
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + 1.5, y + 4 + Math.random() * 5);
+      ctx.stroke();
+    }
+    ctx.fillStyle = 'rgba(50,42,35,0.45)';
+    ctx.beginPath();
+    ctx.ellipse(w * 0.5, h * 0.62, w * 0.32, h * 0.18, 0, 0, TAU);
+    ctx.fill();
+  });
+  const brown = toon(0xffffff, { map: featherMap, soft: true });
   const pale = toon(0xcfc0a7, { soft: true });
-  const dark = toon(0x3b3430, { soft: true });
-  const body = new THREE.Mesh(new THREE.SphereGeometry(0.034, 9, 7), brown);
-  body.scale.set(1.0, 0.9, 1.45);
-  body.position.y = 0.035;
+  const dark = toon(0x332c27, { soft: true });
+  const beakMat = toon(0xb88952, { soft: true });
+  const legMat = toon(0x9b7650, { soft: true });
+
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.036, 16, 12), brown);
+  body.scale.set(1.1, 0.92, 1.55);
+  body.position.y = 0.045;
   sparrowGroup.add(body);
+  addOutline(body, 0.025);
   const headPivot = new THREE.Group();
-  headPivot.position.set(0, 0.065, 0.045);
+  headPivot.position.set(0, 0.078, 0.042);
   sparrowGroup.add(headPivot);
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.025, 9, 7), brown);
-  head.position.z = 0.025;
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.026, 16, 12), brown);
+  head.position.z = 0.024;
   headPivot.add(head);
-  const bib = new THREE.Mesh(new THREE.SphereGeometry(0.017, 7, 5), pale);
-  bib.scale.set(1.0, 0.8, 0.7);
-  bib.position.set(0, 0.008, 0.045);
+  addOutline(head, 0.03);
+  const cap = new THREE.Mesh(new THREE.SphereGeometry(0.021, 10, 8), toon(0x6d5742, { soft: true }));
+  cap.scale.set(1.0, 0.55, 0.8);
+  cap.position.set(0, 0.014, 0.025);
+  headPivot.add(cap);
+  const bib = new THREE.Mesh(new THREE.SphereGeometry(0.017, 9, 7), pale);
+  bib.scale.set(1.1, 0.8, 0.7);
+  bib.position.set(0, 0.004, 0.048);
   headPivot.add(bib);
-  const beak = new THREE.Mesh(new THREE.ConeGeometry(0.008, 0.022, 6), toon(0xc29554, { soft: true }));
+  const beak = new THREE.Mesh(new THREE.ConeGeometry(0.008, 0.023, 8), beakMat);
   beak.rotation.x = Math.PI / 2;
-  beak.position.set(0, 0.012, 0.06);
+  beak.position.set(0, 0.01, 0.062);
   headPivot.add(beak);
   [-1, 1].forEach((side) => {
-    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.0035, 6, 4), dark);
-    eye.position.set(side * 0.012, 0.02, 0.046);
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.0038, 7, 5), dark);
+    eye.position.set(side * 0.012, 0.018, 0.047);
     headPivot.add(eye);
-    const wing = new THREE.Mesh(new THREE.SphereGeometry(0.02, 7, 5), brown);
-    wing.scale.set(0.55, 0.85, 1.6);
-    wing.position.set(side * 0.031, 0.035, -0.006);
-    sparrowGroup.add(wing);
+    const cheek = new THREE.Mesh(new THREE.SphereGeometry(0.011, 7, 5), pale);
+    cheek.scale.set(0.8, 0.65, 0.55);
+    cheek.position.set(side * 0.02, 0.012, 0.043);
+    headPivot.add(cheek);
+    // Folded wing: a layered stack of three small feather shapes.
+    for (let layer = 0; layer < 3; layer++) {
+      const wing = new THREE.Mesh(new THREE.SphereGeometry(0.019, 9, 6), layer === 1 ? pale : brown);
+      wing.scale.set(0.42 + layer * 0.08, 0.7 - layer * 0.1, 1.4 + layer * 0.16);
+      wing.position.set(side * (0.029 + layer * 0.006), 0.045 - layer * 0.008, -0.012 - layer * 0.012);
+      wing.rotation.z = side * (0.08 + layer * 0.05);
+      sparrowGroup.add(wing);
+    }
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.0032, 0.0032, 0.032, 6), legMat);
+    leg.position.set(side * 0.012, 0.012, 0.006);
+    sparrowGroup.add(leg);
+    for (let toe = -1; toe <= 1; toe++) {
+      const foot = new THREE.Mesh(new THREE.BoxGeometry(0.003, 0.003, 0.018), legMat);
+      foot.position.set(side * 0.012 + toe * 0.005, 0.001, 0.018);
+      foot.rotation.y = toe * 0.28;
+      sparrowGroup.add(foot);
+    }
   });
-  const tail = new THREE.Mesh(new THREE.BoxGeometry(0.026, 0.006, 0.055), dark);
-  tail.position.set(0, 0.04, -0.06);
-  tail.rotation.x = -0.18;
-  sparrowGroup.add(tail);
+  const tailPivot = new THREE.Group();
+  tailPivot.position.set(0, 0.05, -0.048);
+  sparrowGroup.add(tailPivot);
+  [-1, 0, 1].forEach((side, i) => {
+    const feather = new THREE.Mesh(new THREE.BoxGeometry(0.009, 0.005, 0.06), i === 1 ? toon(0x6d5742, { soft: true }) : brown);
+    feather.position.set(side * 0.009, -0.002 + Math.abs(side) * 0.003, -0.025);
+    feather.rotation.y = side * 0.18;
+    feather.rotation.x = -0.2;
+    tailPivot.add(feather);
+  });
   sparrowState.head = headPivot;
+  sparrowState.tail = tailPivot;
 }
 function updateSparrow(dt, t) {
   sparrowState.time += dt;
-  const cycle = Math.sin(t * 0.72 + 1.3);
-  const peck = Math.max(0, (cycle - 0.8) / 0.2);
-  sparrowState.head.rotation.x = peck * 0.75;
-  const hop = Math.max(0, Math.sin(t * 0.9 + 2.5) - 0.92) * 0.22;
+  const cycle = Math.sin(t * 0.58 + 1.3);
+  const peck = Math.max(0, (cycle - 0.76) / 0.24);
+  sparrowState.head.rotation.x = peck * 0.9;
+  sparrowState.head.rotation.y = Math.sin(t * 0.42 + 0.8) * 0.12;
+  sparrowState.tail.rotation.x = Math.sin(t * 1.7) * 0.025 + peck * 0.15;
+  const hop = Math.max(0, Math.sin(t * 0.9 + 2.5) - 0.92) * 0.18;
   sparrowGroup.position.y = sparrowState.baseY + hop;
 }
 
