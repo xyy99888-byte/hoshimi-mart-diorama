@@ -6400,15 +6400,68 @@ const greeneryKit = kit('60-街角绿植', 0, { fromY: 0, scaleFrom: 1 });
   for (let i = 0; i < 8; i++) {
     addFlower(greeneryKit, -3.68 + rand(-0.34, 0.34), SIDEWALK_TOP + 0.18, 1.85 + rand(-0.16, 0.16), i, 0.8);
   }
-  // hanging flower basket on the lamp arm
+  // Hanging flower basket, actually suspended from the lamp arm with three
+  // thin hanger wires. It hangs beside the lamp head rather than floating
+  // directly under the light.
   const hx = -3.68;
-  const hz = 2.25;
-  cylinder(greeneryKit, M.metalDark, 0.012, 0.012, 0.55, hx, 3.78, hz, { seg: 5, cast: false });
-  cylinder(greeneryKit, M.cardboard, 0.16, 0.12, 0.22, hx, 3.42, hz, { seg: 12, outline: 0.01 });
+  const hz = 2.02;
+  const hookY = SIDEWALK_TOP + 4.5;
+  const basketY = SIDEWALK_TOP + 3.42;
+  const hook = new THREE.Mesh(new THREE.TorusGeometry(0.026, 0.005, 5, 12), M.metalDark);
+  hook.position.set(hx, hookY, hz);
+  hook.rotation.x = Math.PI / 2;
+  greeneryKit.add(hook);
+  for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * TAU;
+    barBetween(
+      greeneryKit,
+      M.metalDark,
+      [hx, hookY, hz],
+      [hx + Math.cos(a) * 0.12, basketY + 0.12, hz + Math.sin(a) * 0.12],
+      0.0055
+    );
+  }
+  cylinder(greeneryKit, M.cardboard, 0.155, 0.115, 0.22, hx, basketY, hz, { seg: 12, outline: 0.01 });
+  // A readable wire basket frame around the coco liner.
+  [0.11, -0.11].forEach((dy, ringIndex) => {
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(ringIndex === 0 ? 0.165 : 0.12, 0.006, 5, 18),
+      M.metalDark
+    );
+    ring.rotation.x = Math.PI / 2;
+    ring.position.set(hx, basketY + dy, hz);
+    greeneryKit.add(ring);
+  });
+  for (let i = 0; i < 10; i++) {
+    const a = (i / 10) * TAU;
+    barBetween(
+      greeneryKit,
+      M.metalDark,
+      [hx + Math.cos(a) * 0.165, basketY + 0.11, hz + Math.sin(a) * 0.165],
+      [hx + Math.cos(a) * 0.12, basketY - 0.11, hz + Math.sin(a) * 0.12],
+      0.004
+    );
+  }
   for (let i = 0; i < 8; i++) {
     const a = (i / 8) * TAU;
-    sphere(greeneryKit, LEAF_MATS[i % 2], 0.11, hx + Math.cos(a) * 0.13, 3.47, hz + Math.sin(a) * 0.13, { seg: 6 });
-    addFlower(greeneryKit, hx + Math.cos(a) * 0.16, 3.4, hz + Math.sin(a) * 0.16, i, 0.65);
+    sphere(greeneryKit, LEAF_MATS[i % 2], 0.11, hx + Math.cos(a) * 0.13, basketY + 0.07, hz + Math.sin(a) * 0.13, { seg: 6 });
+    addFlower(greeneryKit, hx + Math.cos(a) * 0.16, basketY + 0.0, hz + Math.sin(a) * 0.16, i, 0.65);
+  }
+  // A few trailing vines soften the silhouette below the basket.
+  for (let i = 0; i < 4; i++) {
+    const a = i * 1.7 + 0.3;
+    const vine = new THREE.Mesh(
+      new THREE.TubeGeometry(new THREE.CatmullRomCurve3([
+        new THREE.Vector3(hx + Math.cos(a) * 0.13, basketY - 0.06, hz + Math.sin(a) * 0.13),
+        new THREE.Vector3(hx + Math.cos(a) * 0.16, basketY - 0.2, hz + Math.sin(a) * 0.16),
+        new THREE.Vector3(hx + Math.cos(a) * 0.14, basketY - 0.34, hz + Math.sin(a) * 0.14),
+      ]), 8, 0.004, 4, false),
+      toon(0x4d7d43, { soft: true })
+    );
+    greeneryKit.add(vine);
+    for (let leaf = 0; leaf < 2; leaf++) {
+      sphere(greeneryKit, LEAF_MATS[(i + leaf) % 2], 0.035, hx + Math.cos(a) * 0.15, basketY - 0.14 - leaf * 0.12, hz + Math.sin(a) * 0.15, { seg: 5, cast: false });
+    }
   }
 }
 
@@ -10339,7 +10392,7 @@ detailCommon.add(paperStack);
   contactShadow(detailCommon, -1.0, -0.84, 0.38, 0.42, 0.2, SIDEWALK_TOP + 0.006);
 }
 const droppedGlove = new THREE.Group();
-droppedGlove.position.set(3.3, SIDEWALK_TOP + 0.012, -0.2);
+droppedGlove.position.set(2.82, SIDEWALK_TOP + 0.012, -0.08);
 droppedGlove.rotation.set(0.12, -0.6, 0.3);
 detailCommon.add(droppedGlove);
 {
@@ -10365,7 +10418,7 @@ detailCommon.add(droppedGlove);
   cuff.rotation.x = Math.PI / 2;
   cuff.position.set(0, 0.015, -0.048);
   droppedGlove.add(cuff);
-  contactShadow(detailCommon, 3.3, -0.2, 0.24, 0.32, 0.16, SIDEWALK_TOP + 0.007);
+  contactShadow(detailCommon, 2.82, -0.08, 0.24, 0.32, 0.16, SIDEWALK_TOP + 0.007);
 }
 contactShadow(detailCommon, -3.95, -0.5, 0.95, 0.38, 0.18, SIDEWALK_TOP + 0.006);
 contactShadow(detailCommon, -2.1, -0.5, 0.95, 0.38, 0.18, SIDEWALK_TOP + 0.006);
