@@ -5309,6 +5309,7 @@ function setWeatherMode(mode, instant = false) {
     weatherMix = next;
     applyWeather(weatherMix);
   }
+  startAssembly('switch');
 }
 
 if (btnSunny) btnSunny.addEventListener('click', () => setWeatherMode('sunny'));
@@ -6244,7 +6245,7 @@ const birdWingMat = toon(0xffffff, { map: birdFeatherMap, side: THREE.DoubleSide
 const birdBeakMat = toon(0xc99b57, { soft: true });
 const birdLegMat = toon(0x9c7954, { soft: true });
 const birdGroup = new THREE.Group();
-birdGroup.position.set(-5.45, BIRD_Y, 1.52);
+birdGroup.position.set(-5.82, BIRD_Y, 1.52);
 birdGroup.scale.setScalar(0.98);
 world.add(birdGroup);
 
@@ -6255,9 +6256,9 @@ birdBody.position.set(0, 0.105, 0);
 birdBody.castShadow = false;
 birdGroup.add(birdBody);
 addOutline(birdBody, 0.014);
-const birdBelly = new THREE.Mesh(new THREE.SphereGeometry(0.052, 14, 10), birdPale);
-birdBelly.scale.set(1.1, 0.62, 0.7);
-birdBelly.position.set(0.058, 0.07, 0);
+const birdBelly = new THREE.Mesh(new THREE.SphereGeometry(0.038, 14, 10), birdPale);
+birdBelly.scale.set(0.95, 0.42, 0.62);
+birdBelly.position.set(0.058, 0.112, 0);
 birdGroup.add(birdBelly);
 const birdNeck = new THREE.Mesh(new THREE.SphereGeometry(0.045, 12, 9), birdMat);
 birdNeck.scale.set(0.9, 1.0, 0.85);
@@ -6371,7 +6372,7 @@ const birdWings = [];
   }
 });
 
-addHitSphere(0.3, -5.45, BIRD_Y, 1.52, world, { type: 'bird' });
+addHitSphere(0.3, -5.82, BIRD_Y, 1.52, world, { type: 'bird' });
 function pokeBird() {
   birdState.flap = 2.4;
   playBirdChirp();
@@ -6682,6 +6683,7 @@ function cancelGesture() {
 function onPointerDown(event) {
   if (event.target !== renderer.domElement) return;
   if (event.pointerType === 'mouse' && event.button !== 0) return;
+  if (assemblyState.active) return;
   const hit = findInteractionHit(event);
   if (!hit) {
     ensureAudio();
@@ -6789,6 +6791,10 @@ function onPointerDown(event) {
 
 function onPointerMove(event) {
   if (!activeGesture) {
+    if (assemblyState.active) {
+      renderer.domElement.style.cursor = '';
+      return;
+    }
     if (event.pointerType === 'mouse' && event.target === renderer.domElement) {
       const hit = findInteractionHit(event);
       renderer.domElement.style.cursor = hit ? 'pointer' : '';
@@ -7106,10 +7112,10 @@ function updateInteractions(dt, t) {
     birdWings.forEach((pivot, i) => {
       pivot.rotation.z = (i === 0 ? 1 : -1) * (0.18 + Math.sin(t * 24.0) * 0.72) * active;
     });
-    birdGroup.position.y = BIRD_Y + Math.sin(t * 16.0) * 0.008 * active;
+    if (!assemblyState.active) birdGroup.position.y = BIRD_Y + Math.sin(t * 16.0) * 0.008 * active;
   } else {
     birdWings.forEach((pivot) => { pivot.rotation.z *= 0.9; });
-    birdGroup.position.y = BIRD_Y;
+    if (!assemblyState.active) birdGroup.position.y = BIRD_Y;
   }
 
   // stop sign sways in the wind
@@ -8701,12 +8707,143 @@ function updateAtmosphere(t, dt, m) {
 }
 
 // ------------------------------------------------------------
+// Ground-up assembly animation
+// ------------------------------------------------------------
+const assemblyState = { active: false, fast: false, elapsed: 0 };
+const assemblyTargets = [];
+let assemblyMaxDelay = 1;
+
+function buildAssemblyTargets() {
+  world.updateMatrixWorld(true);
+  const addTarget = (object, delay, duration, fromY, scaleFrom, startOffsetX, startOffsetZ, spin) => {
+    assemblyTargets.push({
+      object,
+      basePos: object.position.clone(),
+      baseRot: object.rotation.clone(),
+      baseScale: object.scale.clone(),
+      startPos: new THREE.Vector3(
+        object.position.x + startOffsetX,
+        fromY,
+        object.position.z + startOffsetZ
+      ),
+      startRot: new THREE.Euler(
+        object.rotation.x,
+        object.rotation.y,
+        object.rotation.z + spin
+      ),
+      startScale: object.scale.clone().multiplyScalar(scaleFrom),
+      delay,
+      duration,
+      activeDelay: delay,
+      activeDuration: duration,
+    });
+    assemblyMaxDelay = Math.max(assemblyMaxDelay, delay + duration);
+  };
+
+  kits.forEach((kitGroup) => {
+    const a = kitGroup.userData.assemble;
+    if (!a) return;
+    let delay = a.delay;
+    if (kitGroup.name.indexOf('60-') === 0) delay = 3.05;
+    const spin = a.spin || ((Math.floor(delay * 10) % 2) ? 0.025 : -0.025);
+    addTarget(
+      kitGroup,
+      delay,
+      a.duration,
+      a.fromY,
+      a.scaleFrom,
+      (Math.floor(delay * 10) % 3 - 1) * 0.12,
+      (Math.floor(delay * 7) % 3 - 1) * 0.08,
+      spin
+    );
+  });
+
+  world.children.forEach((child, index) => {
+    if (child.userData.assemble) return;
+    if (child.isLight) return;
+    const materials = Array.isArray(child.material) ? child.material : [child.material];
+    if (materials.some((m) => m === INVISIBLE_HIT_MAT)) return;
+    if (child.userData.noAssemble) return;
+    const box = new THREE.Box3().setFromObject(child);
+    const maxY = box.isEmpty() ? 0.2 : box.max.y;
+    const heightT = clamp((maxY - 0.16) / 5.1, 0, 1);
+    const delay = 2.55 + heightT * 1.9 + (index % 4) * 0.035;
+    const angle = index * 2.37;
+    addTarget(
+      child,
+      delay,
+      0.72,
+      -0.82 - (index % 3) * 0.06,
+      0.9,
+      Math.cos(angle) * 0.12,
+      Math.sin(angle) * 0.12,
+      (index % 2 ? 0.035 : -0.035)
+    );
+  });
+}
+
+function startAssembly(mode = 'initial') {
+  if (!assemblyTargets.length) buildAssemblyTargets();
+  const fast = mode === 'switch';
+  const now = performance.now();
+  assemblyState.active = true;
+  assemblyState.fast = fast;
+  assemblyState.elapsed = 0;
+  const span = Math.max(0.001, assemblyMaxDelay);
+  assemblyTargets.forEach((record) => {
+    record.activeDelay = fast ? (record.delay / span) * 0.62 : record.delay;
+    record.activeDuration = fast ? 0.52 : record.duration;
+    record.object.position.copy(record.startPos);
+    record.object.rotation.copy(record.startRot);
+    record.object.scale.copy(record.startScale);
+  });
+  shadowFrozen = false;
+  renderer.shadowMap.autoUpdate = true;
+  renderer.shadowMap.needsUpdate = true;
+}
+
+function updateAssembly(dt) {
+  if (!assemblyState.active) return;
+  // Use accumulated frame time instead of wall-clock time so a slow first
+  // shader compile does not skip the assembly.
+  assemblyState.elapsed += dt;
+  let done = true;
+  assemblyTargets.forEach((record) => {
+    const p = clamp((assemblyState.elapsed - record.activeDelay) / record.activeDuration, 0, 1);
+    if (p < 1) done = false;
+    const k = easeOutCubic(p);
+    record.object.position.x = lerp(record.startPos.x, record.basePos.x, k);
+    record.object.position.y = lerp(record.startPos.y, record.basePos.y, k);
+    record.object.position.z = lerp(record.startPos.z, record.basePos.z, k);
+    record.object.rotation.x = lerp(record.startRot.x, record.baseRot.x, k);
+    record.object.rotation.y = lerp(record.startRot.y, record.baseRot.y, k);
+    record.object.rotation.z = lerp(record.startRot.z, record.baseRot.z, k);
+    record.object.scale.x = lerp(record.startScale.x, record.baseScale.x, k);
+    record.object.scale.y = lerp(record.startScale.y, record.baseScale.y, k);
+    record.object.scale.z = lerp(record.startScale.z, record.baseScale.z, k);
+  });
+  if (done) {
+    assemblyTargets.forEach((record) => {
+      record.object.position.copy(record.basePos);
+      record.object.rotation.copy(record.baseRot);
+      record.object.scale.copy(record.baseScale);
+    });
+    assemblyState.active = false;
+    shadowFrozen = false;
+    renderer.shadowMap.autoUpdate = false;
+    renderer.shadowMap.needsUpdate = true;
+  }
+}
+
+// ------------------------------------------------------------
 // Render loop
 // ------------------------------------------------------------
 function animate() {
   requestAnimationFrame(animate);
   const dt = Math.min(clock.getDelta(), 0.05);
   const t = clock.elapsedTime;
+
+  updateAssembly(dt);
 
   if (weatherMix !== weatherTarget) {
     const p = clamp((performance.now() - weatherTransitionStart) / 1400, 0, 1);
@@ -8735,7 +8872,10 @@ function animate() {
   updateAtmosphere(t, dt, weatherMix);
   updateInteractions(dt, t);
 
-  if (!shadowFrozen) {
+  if (assemblyState.active) {
+    renderer.shadowMap.autoUpdate = true;
+    renderer.shadowMap.needsUpdate = true;
+  } else if (!shadowFrozen) {
     shadowFrozen = true;
     renderer.shadowMap.autoUpdate = false;
     renderer.shadowMap.needsUpdate = true;
@@ -8761,21 +8901,17 @@ window.addEventListener('resize', () => {
   fitModelToViewport(false);
 });
 
-// The combined weather page is always fully assembled and stable.
-kits.forEach((g) => {
-  g.visible = true;
-  g.position.y = 0;
-  g.scale.setScalar(1);
-});
 updateWeatherButtons(initialWeather);
 applyWeather(weatherMix);
-renderer.shadowMap.autoUpdate = false;
-renderer.shadowMap.needsUpdate = true;
 window.__diorama = {
   scene, camera, controls, renderer, composer, kits, wetKit, TEX, REFLECT_TEX,
   weatherLights, sunnyDecor, cloudGroup, interactions: interactionDebug,
   setWeatherMode,
   getWeatherMode: () => (weatherTarget > 0.5 ? 'sunny' : 'rain'),
   getWeatherMix: () => weatherMix,
+  assembly: assemblyState,
+  assemblyTargets,
+  startAssembly,
 };
+startAssembly('initial');
 animate();
