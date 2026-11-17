@@ -10568,113 +10568,6 @@ function updateRainEffects(dt, t) {
   });
 }
 
-// A small house sparrow perched on the guardrail. It is decorative and
-// responds only to the ambient wind, not to clicks.
-const sparrowGroup = new THREE.Group();
-sparrowGroup.position.set(2.18, SIDEWALK_TOP + 0.89, 5.44);
-sparrowGroup.rotation.y = 0.42;
-sparrowGroup.scale.setScalar(1.45);
-world.add(sparrowGroup);
-const sparrowState = { time: 0, head: null, tail: null, baseY: sparrowGroup.position.y };
-{
-  const featherMap = canvasTexture(128, 128, (ctx, w, h) => {
-    ctx.fillStyle = '#8a7054';
-    ctx.fillRect(0, 0, w, h);
-    for (let i = 0; i < 220; i++) {
-      ctx.strokeStyle = `rgba(${Math.random() < 0.5 ? '205,188,160' : '54,44,36'},${0.06 + Math.random() * 0.1})`;
-      ctx.lineWidth = 0.8;
-      ctx.beginPath();
-      const x = Math.random() * w;
-      const y = Math.random() * h;
-      ctx.moveTo(x, y);
-      ctx.lineTo(x + 1.5, y + 4 + Math.random() * 5);
-      ctx.stroke();
-    }
-    ctx.fillStyle = 'rgba(50,42,35,0.45)';
-    ctx.beginPath();
-    ctx.ellipse(w * 0.5, h * 0.62, w * 0.32, h * 0.18, 0, 0, TAU);
-    ctx.fill();
-  });
-  const brown = toon(0xffffff, { map: featherMap, soft: true });
-  const pale = toon(0xcfc0a7, { soft: true });
-  const dark = toon(0x332c27, { soft: true });
-  const beakMat = toon(0xb88952, { soft: true });
-  const legMat = toon(0x9b7650, { soft: true });
-
-  const body = new THREE.Mesh(new THREE.SphereGeometry(0.036, 16, 12), brown);
-  body.scale.set(1.1, 0.92, 1.55);
-  body.position.y = 0.045;
-  sparrowGroup.add(body);
-  addOutline(body, 0.025);
-  const headPivot = new THREE.Group();
-  headPivot.position.set(0, 0.078, 0.042);
-  sparrowGroup.add(headPivot);
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.026, 16, 12), brown);
-  head.position.z = 0.024;
-  headPivot.add(head);
-  addOutline(head, 0.03);
-  const cap = new THREE.Mesh(new THREE.SphereGeometry(0.021, 10, 8), toon(0x6d5742, { soft: true }));
-  cap.scale.set(1.0, 0.55, 0.8);
-  cap.position.set(0, 0.014, 0.025);
-  headPivot.add(cap);
-  const bib = new THREE.Mesh(new THREE.SphereGeometry(0.017, 9, 7), pale);
-  bib.scale.set(1.1, 0.8, 0.7);
-  bib.position.set(0, 0.004, 0.048);
-  headPivot.add(bib);
-  const beak = new THREE.Mesh(new THREE.ConeGeometry(0.008, 0.023, 8), beakMat);
-  beak.rotation.x = Math.PI / 2;
-  beak.position.set(0, 0.01, 0.062);
-  headPivot.add(beak);
-  [-1, 1].forEach((side) => {
-    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.0038, 7, 5), dark);
-    eye.position.set(side * 0.012, 0.018, 0.047);
-    headPivot.add(eye);
-    const cheek = new THREE.Mesh(new THREE.SphereGeometry(0.011, 7, 5), pale);
-    cheek.scale.set(0.8, 0.65, 0.55);
-    cheek.position.set(side * 0.02, 0.012, 0.043);
-    headPivot.add(cheek);
-    // Folded wing: a layered stack of three small feather shapes.
-    for (let layer = 0; layer < 3; layer++) {
-      const wing = new THREE.Mesh(new THREE.SphereGeometry(0.019, 9, 6), layer === 1 ? pale : brown);
-      wing.scale.set(0.42 + layer * 0.08, 0.7 - layer * 0.1, 1.4 + layer * 0.16);
-      wing.position.set(side * (0.029 + layer * 0.006), 0.045 - layer * 0.008, -0.012 - layer * 0.012);
-      wing.rotation.z = side * (0.08 + layer * 0.05);
-      sparrowGroup.add(wing);
-    }
-    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.0032, 0.0032, 0.032, 6), legMat);
-    leg.position.set(side * 0.012, 0.012, 0.006);
-    sparrowGroup.add(leg);
-    for (let toe = -1; toe <= 1; toe++) {
-      const foot = new THREE.Mesh(new THREE.BoxGeometry(0.003, 0.003, 0.018), legMat);
-      foot.position.set(side * 0.012 + toe * 0.005, 0.001, 0.018);
-      foot.rotation.y = toe * 0.28;
-      sparrowGroup.add(foot);
-    }
-  });
-  const tailPivot = new THREE.Group();
-  tailPivot.position.set(0, 0.05, -0.048);
-  sparrowGroup.add(tailPivot);
-  [-1, 0, 1].forEach((side, i) => {
-    const feather = new THREE.Mesh(new THREE.BoxGeometry(0.009, 0.005, 0.06), i === 1 ? toon(0x6d5742, { soft: true }) : brown);
-    feather.position.set(side * 0.009, -0.002 + Math.abs(side) * 0.003, -0.025);
-    feather.rotation.y = side * 0.18;
-    feather.rotation.x = -0.2;
-    tailPivot.add(feather);
-  });
-  sparrowState.head = headPivot;
-  sparrowState.tail = tailPivot;
-}
-function updateSparrow(dt, t) {
-  sparrowState.time += dt;
-  const cycle = Math.sin(t * 0.58 + 1.3);
-  const peck = Math.max(0, (cycle - 0.76) / 0.24);
-  sparrowState.head.rotation.x = peck * 0.9;
-  sparrowState.head.rotation.y = Math.sin(t * 0.42 + 0.8) * 0.12;
-  sparrowState.tail.rotation.x = Math.sin(t * 1.7) * 0.025 + peck * 0.15;
-  const hop = Math.max(0, Math.sin(t * 0.9 + 2.5) - 0.92) * 0.18;
-  sparrowGroup.position.y = sparrowState.baseY + hop;
-}
-
 mergeOpaqueMeshesInKit(detailCommon);
 
 // ============================================================
@@ -10686,7 +10579,6 @@ function updateDetailInteractions(dt, t) {
   aFrameGroup.visible = detailSunny.visible;
   // The cat shelters indoors once it starts raining.
   catGroup.visible = weatherMix > 0.34;
-  sparrowGroup.visible = weatherMix > 0.34;
 
   const wind = ambientWind(t);
   cloudSprites.forEach((sprite, i) => {
@@ -10761,7 +10653,6 @@ function updateDetailInteractions(dt, t) {
   updatePetals(dt, t, wind);
   updateWindScraps(dt, t, wind);
   updateRainEffects(dt, t);
-  updateSparrow(dt, t);
   updateNeonReflections(dt, t);
 
   ambientTimer -= dt;
