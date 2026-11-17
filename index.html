@@ -2224,6 +2224,7 @@ let weatherTarget = initialWeather === 'sunny' ? 1 : 0;
 let weatherMix = weatherTarget;
 let weatherTransitionFrom = weatherMix;
 let weatherTransitionStart = performance.now();
+let weatherShadowTimer = 0;
 if (weatherMix > 0.5) document.body.classList.add('sunny');
 
 // ------------------------------------------------------------
@@ -7336,6 +7337,17 @@ scene.traverse((o) => {
   }
 });
 
+// Wet-road puddles and reflection strips carry a uOpacity uniform. Keep a
+// base value so they can dissolve smoothly instead of switching off.
+const wetFadeMaterials = [];
+const wetFadeSeen = new Set();
+wetKit.traverse((o) => {
+  if (!o.isMesh || !o.material || !o.material.uniforms || !o.material.uniforms.uOpacity) return;
+  if (wetFadeSeen.has(o.material.uuid)) return;
+  wetFadeSeen.add(o.material.uuid);
+  wetFadeMaterials.push({ material: o.material, base: o.material.uniforms.uOpacity.value });
+});
+
 // ------------------------------------------------------------
 // Weather palettes
 // ------------------------------------------------------------
@@ -7364,24 +7376,43 @@ function smoothstep(a, b, x) {
   return smoothMix(a, b, x);
 }
 
-function setGroundMaps(sunny) {
+function setGroundMaps(mix) {
   const pairs = [
     [M.asphalt, TEX.asphalt, TEX.asphaltDay],
     [M.sidewalk, TEX.sidewalk, TEX.sidewalkDay],
     [M.stoneAlley, TEX.stoneAlley, TEX.stoneAlleyDay],
   ];
   pairs.forEach(([mat, rainMap, dayMap]) => {
-    const target = sunny ? dayMap : rainMap;
-    if (mat.map !== target) {
-      mat.map = target;
+    if (!mat.userData.weatherCrossfade) {
+      // Keep both ground maps resident and crossfade them in the shader.
+      // Swapping material.map at the midpoint was the main visible pop.
+      mat.map = rainMap;
+      mat.userData.weatherCrossfade = {
+        dayMap: { value: dayMap },
+        mix: { value: 0 },
+      };
+      mat.onBeforeCompile = (shader) => {
+        shader.uniforms.uGroundDayMap = mat.userData.weatherCrossfade.dayMap;
+        shader.uniforms.uGroundWeatherMix = mat.userData.weatherCrossfade.mix;
+        shader.fragmentShader = 'uniform sampler2D uGroundDayMap;\nuniform float uGroundWeatherMix;\n' + shader.fragmentShader;
+        shader.fragmentShader = shader.fragmentShader.replace(
+          '#include <map_fragment>',
+          `#ifdef USE_MAP
+            vec4 groundRain = mapTexelToLinear(texture2D(map, vUv));
+            vec4 groundDay = mapTexelToLinear(texture2D(uGroundDayMap, vUv));
+            diffuseColor *= mix(groundRain, groundDay, uGroundWeatherMix);
+          #endif`
+        );
+      };
+      mat.customProgramCacheKey = () => 'ground-weather-crossfade-v1';
       mat.needsUpdate = true;
     }
+    mat.userData.weatherCrossfade.mix.value = clamp(mix, 0, 1);
   });
 }
 
 function applyWeather(mix) {
   const m = clamp(mix, 0, 1);
-  const day = m > 0.5;
 
   // lights
   weatherLights.forEach((r) => {
@@ -7407,7 +7438,7 @@ function applyWeather(mix) {
   scene.fog.density = lerp(0.0165, 0.0042, m);
 
   // dry sunlit surfaces vs dark wet night surfaces
-  setGroundMaps(day);
+  setGroundMaps(m);
 
   // exposure / bloom / grade
   renderer.toneMappingExposure = lerp(0.86, 0.9, m);
@@ -7421,12 +7452,16 @@ function applyWeather(mix) {
   const rainFade = 1 - smoothMix(0.02, 0.72, m);
   rainMaterial.uniforms.uOpacity.value = rainFade;
   rain.visible = rainFade > 0.012;
-  splashGroup.visible = m < 0.72;
-  lampShaft.visible = m < 0.45;
+  splashGroup.visible = m < 0.86;
+  lampShaft.visible = m < 0.6;
   lampShaft.material.opacity = rainFade * 0.055;
-  mistPatches.forEach((p) => { p.visible = m < 0.35; });
-  wetKit.visible = m < 0.45;
-  rainOnlyMeshes.forEach((mesh) => { mesh.visible = m < 0.45; });
+  mistPatches.forEach((p) => { p.visible = m < 0.5; });
+  const wetAlpha = 1 - smoothMix(0.02, 0.82, m);
+  wetFadeMaterials.forEach((r) => {
+    r.material.uniforms.uOpacity.value = r.base * wetAlpha;
+  });
+  wetKit.visible = wetAlpha > 0.008;
+  rainOnlyMeshes.forEach((mesh) => { mesh.visible = m < 0.7; });
 
   // neon halos and light spills
   glowSprites.forEach((s) => {
@@ -7438,16 +7473,16 @@ function applyWeather(mix) {
   });
 
   // sunny decor + painted cloud dome
-  sunnyDecor.visible = m > 0.34;
-  balloonPivot.visible = m > 0.34;
-  bikeBasketFlowerGroup.visible = m > 0.34;
+  sunnyDecor.visible = m > 0.16;
+  balloonPivot.visible = m > 0.16;
+  bikeBasketFlowerGroup.visible = m > 0.16;
   cloudGroup.visible = m > 0.015;
   cloudMat.opacity = 0.55 * smoothMix(0.1, 0.9, m);
   cloudSprites.forEach((s) => {
     s.material.opacity = (s.userData.cloudBaseOpacity || 0.7) * smoothMix(0.08, 0.9, m);
     s.visible = s.material.opacity > 0.002;
   });
-  sunnyDust.visible = m > 0.08;
+  sunnyDust.visible = m > 0.02;
   dustMat.opacity = 0.4 * smoothMix(0.08, 0.9, m);
 
   // body background / vignette
@@ -7479,6 +7514,7 @@ function setWeatherMode(mode, instant = false) {
   const next = mode === 'rain' ? 0 : 1;
   weatherTransitionFrom = weatherMix;
   weatherTransitionStart = performance.now();
+  weatherShadowTimer = 0;
   weatherTarget = next;
   updateWeatherButtons(next > 0.5 ? 'sunny' : 'rain');
   try {
@@ -7497,7 +7533,6 @@ function setWeatherMode(mode, instant = false) {
     weatherMix = next;
     applyWeather(weatherMix);
   }
-  startAssembly('switch');
 }
 
 if (btnSunny) btnSunny.addEventListener('click', () => setWeatherMode('sunny'));
@@ -11033,10 +11068,16 @@ function animate() {
   updateAssembly(dt);
 
   if (weatherMix !== weatherTarget) {
-    const p = clamp((performance.now() - weatherTransitionStart) / 1400, 0, 1);
+    const p = clamp((performance.now() - weatherTransitionStart) / 3200, 0, 1);
     weatherMix = lerp(weatherTransitionFrom, weatherTarget, easeInOutCubic(p));
     if (p >= 1) weatherMix = weatherTarget;
     applyWeather(weatherMix);
+    weatherShadowTimer -= dt;
+    if (weatherShadowTimer <= 0) {
+      weatherShadowTimer = 0.16;
+      renderer.shadowMap.needsUpdate = true;
+    }
+    if (p >= 1) renderer.shadowMap.needsUpdate = true;
   }
 
   rainMaterial.uniforms.uTime.value = t;
