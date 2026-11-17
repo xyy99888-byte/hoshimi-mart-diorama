@@ -7630,16 +7630,31 @@ const aFramePosterMat = new THREE.MeshBasicMaterial({ map: detailAframeMaps[0] }
 let aFrameIndex = 0;
 {
   const wood = toon(0x8e6c4a, { soft: true });
-  const boardFront = box(aFrameGroup, wood, 0.5, 0.62, 0.035, 0, 0.44, 0.12, { outline: 0.004 });
-  const boardBack = box(aFrameGroup, wood, 0.5, 0.62, 0.035, 0, 0.44, -0.12, { outline: 0.004 });
+  // The two panels meet at a real top hinge instead of being two floating
+  // boards with an open crack down the middle.
+  const boardFront = box(aFrameGroup, wood, 0.5, 0.62, 0.035, 0, 0.44, 0.056, { outline: 0.004 });
+  const boardBack = box(aFrameGroup, wood, 0.5, 0.62, 0.035, 0, 0.44, -0.056, { outline: 0.004 });
   boardFront.rotation.x = -0.18;
   boardBack.rotation.x = 0.18;
-  const poster = new THREE.Mesh(new THREE.PlaneGeometry(0.4, 0.5), aFramePosterMat);
-  poster.position.set(0, 0.48, 0.195);
-  poster.rotation.x = -0.18;
-  aFrameGroup.add(poster);
-  box(aFrameGroup, M.metalDark, 0.52, 0.025, 0.04, 0, 0.12, 0.17, { cast: false });
-  box(aFrameGroup, M.metalDark, 0.52, 0.025, 0.04, 0, 0.12, -0.17, { cast: false });
+  const posterFront = new THREE.Mesh(new THREE.PlaneGeometry(0.4, 0.5), aFramePosterMat);
+  posterFront.position.set(0, 0.48, 0.086);
+  posterFront.rotation.x = -0.18;
+  aFrameGroup.add(posterFront);
+  const posterBack = new THREE.Mesh(new THREE.PlaneGeometry(0.4, 0.5), aFramePosterMat);
+  posterBack.position.set(0, 0.48, -0.086);
+  posterBack.rotation.set(0.18, Math.PI, 0);
+  aFrameGroup.add(posterBack);
+  const hinge = new THREE.Mesh(new THREE.CylinderGeometry(0.017, 0.017, 0.5, 8), M.metalLight);
+  hinge.rotation.z = Math.PI / 2;
+  hinge.position.set(0, 0.744, 0);
+  aFrameGroup.add(hinge);
+  [-0.16, 0.16].forEach((x) => {
+    const strap = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.026, 0.05), M.metalDark);
+    strap.position.set(x, 0.724, 0);
+    aFrameGroup.add(strap);
+  });
+  box(aFrameGroup, M.metalDark, 0.52, 0.025, 0.04, 0, 0.12, 0.165, { cast: false });
+  box(aFrameGroup, M.metalDark, 0.52, 0.025, 0.04, 0, 0.12, -0.165, { cast: false });
   contactShadow(aFrameGroup, 0, 0, 0.7, 0.45, 0.22, 0.006);
   addHitBox(0.54, 0.65, 0.36, 0, 0.38, 0, aFrameGroup, { type: 'aFrame' });
 }
