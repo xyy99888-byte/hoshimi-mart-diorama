@@ -4,6 +4,14 @@
 
 **在线预览：** <https://xyy99888-byte.github.io/hoshimi-mart-diorama/>
 
+## 仓库状态与许可
+
+- **仓库可见性：公开（Public）**，不是私有仓库。地址：<https://github.com/xyy99888-byte/hoshimi-mart-diorama>。
+- **许可证：当前没有 LICENSE，因此不是开源项目。** “公开可见”不等于“开源”；在没有明确授权的情况下，默认保留所有权利，不建议复制、修改、再分发或商业使用。
+- 在线预览是公开的 GitHub Pages 演示页，只用于展示这个微缩场景。
+- 如果希望转为开源，需要由仓库所有者明确选择一个许可证（例如 MIT、Apache-2.0、GPL-3.0）并添加 `LICENSE` 文件；如果希望保持专有，则保持当前无许可证状态，并补充版权声明即可。
+- 最新代码已合并到 `main` 分支，线上 GitHub Pages 与 `main` 同步。
+
 ![晴天全景](docs/preview-wide.jpg)
 
 ![晴天店面近景](docs/preview-close.jpg)
