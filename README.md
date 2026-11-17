@@ -118,10 +118,19 @@ python -m http.server 8765
 ### 入场组装动画
 
 - 页面首次加载时，场景从空底座开始组装：展示底座、道路、人行道、建筑主体、店内、招牌和雨棚、贩卖机、街道设施、植物与零散小物按高度顺序从地面升起、轻微缩放并落位。
-- 整个场景拆成约 **97 个构建单元**；初始组装约 5 秒，晴雨切换时以约 1.1 秒的快节奏重新组装。
+- 整个场景拆成约 **97 个构建单元**；大件从底座内按编排顺序升起，小物在各自高度轻微上浮、缩放并落位，不再全场随机飞入。
+- 初始组装约 **4.3 秒**，晴雨切换时以约 **1.0 秒**的快节奏重新组装；相邻阶段之间保留约 30–40% 的交叉时间，避免一节一停顿。
 - 晴天和雨天使用同一套组装顺序；切换天气会立即重播组装，同时天气过渡照常进行。
+- 组装使用 ease-in/ease-out 曲线，阴影贴图在整个组装期间保持冻结，只在完成时刷新一次，避免逐帧重建阴影造成卡顿。
 - 组装期间暂停点击/拖拽交互，但相机仍可旋转和缩放；完成后自动恢复全部交互。
-- 组装过程中阴影实时更新，结束后重新冻结静态阴影贴图。
+
+组装动画参考：
+
+- [3D Motion Reference — 組み立て（飛来して合体）](https://takayustudio.jp/3d-motion-reference/items/assemble/)：飞入、合体和落位的整体节奏参考。
+- [TresJS Advanced GSAP Animations](https://github.com/tresjs/tres/blob/a83831c6ccb6cb51176b5c43f6848d7a9e61d7ce/apps/docs/content/5.cookbook/4.advanced-gsap-animations.md)：时间线、stagger、重叠与缓动结构。
+- [Animation Mentor — Overlap and Pendulum Motion](https://www.animationmentor.com/blog/tutorial-overlap-pendulum-motion-animation/)：动画重叠和跟随动作，避免机械的一件一件出现。
+- [exploded-view](https://github.com/luisxavierxd/exploded-view)：零件升空、分层落位和镜头观看的装配展示思路。
+- [GSAP Cheatsheet](https://gsap.com/cheatsheet/)：ease、stagger 与 timeline 参数提示。
 
 角色参考：
 

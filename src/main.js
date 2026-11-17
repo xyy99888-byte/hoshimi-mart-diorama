@@ -8713,25 +8713,29 @@ const assemblyState = { active: false, fast: false, elapsed: 0 };
 const assemblyTargets = [];
 let assemblyMaxDelay = 1;
 
+const kitAssemblyOrder = {
+  '00': 0.00, '01': 0.08, '02': 0.17, '03': 0.28, '04': 0.38,
+  '10': 0.50, '20': 0.72, '21': 0.85, '22': 0.97, '23': 1.07,
+  '24': 1.17, '25': 1.27, '26': 1.37, '12': 1.52, '14': 1.66,
+  '13': 1.80, '37': 1.94, '30': 2.08, '31': 2.20, '32': 2.30,
+  '33': 2.40, '34': 2.50, '35': 2.60, '36': 2.72, '39': 2.82,
+  '60': 2.95, '11': 2.90,
+};
+
 function buildAssemblyTargets() {
   world.updateMatrixWorld(true);
-  const addTarget = (object, delay, duration, fromY, scaleFrom, startOffsetX, startOffsetZ, spin) => {
+  const addTarget = (object, delay, duration, startY, scaleFactor, offsetX, offsetZ, spin) => {
+    const basePos = object.position.clone();
+    const baseRot = object.rotation.clone();
+    const baseScale = object.scale.clone();
     assemblyTargets.push({
       object,
-      basePos: object.position.clone(),
-      baseRot: object.rotation.clone(),
-      baseScale: object.scale.clone(),
-      startPos: new THREE.Vector3(
-        object.position.x + startOffsetX,
-        fromY,
-        object.position.z + startOffsetZ
-      ),
-      startRot: new THREE.Euler(
-        object.rotation.x,
-        object.rotation.y,
-        object.rotation.z + spin
-      ),
-      startScale: object.scale.clone().multiplyScalar(scaleFrom),
+      basePos,
+      baseRot,
+      baseScale,
+      startPos: new THREE.Vector3(basePos.x + offsetX, startY, basePos.z + offsetZ),
+      startRot: new THREE.Euler(baseRot.x, baseRot.y, baseRot.z + spin),
+      startScale: baseScale.clone().multiplyScalar(scaleFactor),
       delay,
       duration,
       activeDelay: delay,
@@ -8740,24 +8744,22 @@ function buildAssemblyTargets() {
     assemblyMaxDelay = Math.max(assemblyMaxDelay, delay + duration);
   };
 
+  // Large pieces rise out of the plinth in an authored order. The overlap
+  // between stages is intentional: it keeps the build from feeling like a
+  // checklist of isolated objects.
   kits.forEach((kitGroup) => {
     const a = kitGroup.userData.assemble;
     if (!a) return;
-    let delay = a.delay;
-    if (kitGroup.name.indexOf('60-') === 0) delay = 3.05;
-    const spin = a.spin || ((Math.floor(delay * 10) % 2) ? 0.025 : -0.025);
-    addTarget(
-      kitGroup,
-      delay,
-      a.duration,
-      a.fromY,
-      a.scaleFrom,
-      (Math.floor(delay * 10) % 3 - 1) * 0.12,
-      (Math.floor(delay * 7) % 3 - 1) * 0.08,
-      spin
-    );
+    const key = kitGroup.name.slice(0, 2);
+    const delay = kitAssemblyOrder[key] === undefined ? a.delay : kitAssemblyOrder[key];
+    const duration = clamp(a.duration * 0.9, 0.5, 0.78);
+    const startY = a.fromY >= 0 ? -0.7 : a.fromY;
+    const scaleFactor = Math.min(0.94, a.scaleFrom);
+    addTarget(kitGroup, delay, duration, startY, scaleFactor, 0.055, -0.045, 0.012);
   });
 
+  // Small props settle into their own layer instead of flying all the way
+  // from the ground; this removes the random pinball look of the first pass.
   world.children.forEach((child, index) => {
     if (child.userData.assemble) return;
     if (child.isLight) return;
@@ -8767,17 +8769,16 @@ function buildAssemblyTargets() {
     const box = new THREE.Box3().setFromObject(child);
     const maxY = box.isEmpty() ? 0.2 : box.max.y;
     const heightT = clamp((maxY - 0.16) / 5.1, 0, 1);
-    const delay = 2.55 + heightT * 1.9 + (index % 4) * 0.035;
-    const angle = index * 2.37;
+    const delay = 2.95 + heightT * 0.72 + (index % 5) * 0.018;
     addTarget(
       child,
       delay,
-      0.72,
-      -0.82 - (index % 3) * 0.06,
-      0.9,
-      Math.cos(angle) * 0.12,
-      Math.sin(angle) * 0.12,
-      (index % 2 ? 0.035 : -0.035)
+      0.52,
+      child.position.y - (0.22 + (index % 3) * 0.08),
+      0.93,
+      0.035,
+      -0.03,
+      (index % 2 ? 0.012 : -0.012)
     );
   });
 }
@@ -8785,33 +8786,33 @@ function buildAssemblyTargets() {
 function startAssembly(mode = 'initial') {
   if (!assemblyTargets.length) buildAssemblyTargets();
   const fast = mode === 'switch';
-  const now = performance.now();
   assemblyState.active = true;
   assemblyState.fast = fast;
   assemblyState.elapsed = 0;
   const span = Math.max(0.001, assemblyMaxDelay);
   assemblyTargets.forEach((record) => {
-    record.activeDelay = fast ? (record.delay / span) * 0.62 : record.delay;
-    record.activeDuration = fast ? 0.52 : record.duration;
+    record.activeDelay = fast ? 0.04 + (record.delay / span) * 0.48 : record.delay;
+    record.activeDuration = fast ? 0.42 : record.duration;
     record.object.position.copy(record.startPos);
     record.object.rotation.copy(record.startRot);
     record.object.scale.copy(record.startScale);
   });
-  shadowFrozen = false;
-  renderer.shadowMap.autoUpdate = true;
+  // Keep the static shadow map frozen during the build. Rebuilding it every
+  // frame was the main source of the choppy first pass.
+  shadowFrozen = true;
+  renderer.shadowMap.autoUpdate = false;
   renderer.shadowMap.needsUpdate = true;
 }
 
 function updateAssembly(dt) {
   if (!assemblyState.active) return;
-  // Use accumulated frame time instead of wall-clock time so a slow first
-  // shader compile does not skip the assembly.
   assemblyState.elapsed += dt;
   let done = true;
   assemblyTargets.forEach((record) => {
     const p = clamp((assemblyState.elapsed - record.activeDelay) / record.activeDuration, 0, 1);
     if (p < 1) done = false;
-    const k = easeOutCubic(p);
+    // A gentle ease-in/ease-out gives each piece a soft departure and settle.
+    const k = easeInOutCubic(p);
     record.object.position.x = lerp(record.startPos.x, record.basePos.x, k);
     record.object.position.y = lerp(record.startPos.y, record.basePos.y, k);
     record.object.position.z = lerp(record.startPos.z, record.basePos.z, k);
@@ -8829,8 +8830,6 @@ function updateAssembly(dt) {
       record.object.scale.copy(record.baseScale);
     });
     assemblyState.active = false;
-    shadowFrozen = false;
-    renderer.shadowMap.autoUpdate = false;
     renderer.shadowMap.needsUpdate = true;
   }
 }
@@ -8872,10 +8871,7 @@ function animate() {
   updateAtmosphere(t, dt, weatherMix);
   updateInteractions(dt, t);
 
-  if (assemblyState.active) {
-    renderer.shadowMap.autoUpdate = true;
-    renderer.shadowMap.needsUpdate = true;
-  } else if (!shadowFrozen) {
+  if (!assemblyState.active && !shadowFrozen) {
     shadowFrozen = true;
     renderer.shadowMap.autoUpdate = false;
     renderer.shadowMap.needsUpdate = true;
