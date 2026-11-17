@@ -8400,35 +8400,165 @@ function toggleAC() {
   playSwitchClick();
 }
 
-const BIRD_Y = 4.98;
+const BIRD_Y = 4.975;
 const birdState = { flap: 0 };
+const birdFeatherMap = canvasTexture(256, 256, (ctx, w, h) => {
+  ctx.fillStyle = '#806b55';
+  ctx.fillRect(0, 0, w, h);
+  for (let i = 0; i < 420; i++) {
+    const x = Math.random() * w;
+    const y = Math.random() * h;
+    ctx.strokeStyle = `rgba(${Math.random() < 0.45 ? '218,202,178' : '49,40,32'},${0.05 + Math.random() * 0.1})`;
+    ctx.lineWidth = 0.7 + Math.random();
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + (Math.random() - 0.5) * 5, y + 5 + Math.random() * 7);
+    ctx.stroke();
+  }
+  // Soft dark barring on the folded wings/back.
+  for (let i = 0; i < 7; i++) {
+    ctx.strokeStyle = `rgba(57,45,35,${0.08 + i * 0.012})`;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(0, 40 + i * 26);
+    ctx.lineTo(w, 43 + i * 26);
+    ctx.stroke();
+  }
+});
+const birdMat = toon(0xffffff, { map: birdFeatherMap, soft: true });
+const birdPale = toon(0xd7c7ad, { soft: true });
+const birdDark = toon(0x3a3029, { soft: true });
+const birdWingMat = toon(0xffffff, { map: birdFeatherMap, side: THREE.DoubleSide, soft: true });
+const birdBeakMat = toon(0xc99b57, { soft: true });
+const birdLegMat = toon(0x9c7954, { soft: true });
 const birdGroup = new THREE.Group();
 birdGroup.position.set(-5.45, BIRD_Y, 1.52);
+birdGroup.scale.setScalar(0.98);
 world.add(birdGroup);
-const birdBody = new THREE.Mesh(new THREE.SphereGeometry(0.09, 9, 7), toon(0x6d6257));
-birdBody.scale.set(1.3, 0.9, 0.9);
+
+// Body, head, beak and eye. The bird faces +X along the crossarm.
+const birdBody = new THREE.Mesh(new THREE.SphereGeometry(0.075, 20, 14), birdMat);
+birdBody.scale.set(1.36, 0.92, 0.8);
+birdBody.position.set(0, 0.105, 0);
 birdBody.castShadow = false;
 birdGroup.add(birdBody);
-const birdHead = new THREE.Mesh(new THREE.SphereGeometry(0.055, 8, 6), toon(0x7b6d5f));
-birdHead.position.set(0.085, 0.08, 0);
-birdHead.castShadow = false;
+addOutline(birdBody, 0.014);
+const birdBelly = new THREE.Mesh(new THREE.SphereGeometry(0.052, 14, 10), birdPale);
+birdBelly.scale.set(1.1, 0.62, 0.7);
+birdBelly.position.set(0.058, 0.07, 0);
+birdGroup.add(birdBelly);
+const birdNeck = new THREE.Mesh(new THREE.SphereGeometry(0.045, 12, 9), birdMat);
+birdNeck.scale.set(0.9, 1.0, 0.85);
+birdNeck.position.set(0.088, 0.15, 0);
+birdGroup.add(birdNeck);
+const birdHead = new THREE.Mesh(new THREE.SphereGeometry(0.055, 18, 14), birdMat);
+birdHead.scale.set(0.95, 1.0, 0.9);
+birdHead.position.set(0.125, 0.195, 0);
 birdGroup.add(birdHead);
-const birdBeak = new THREE.Mesh(new THREE.ConeGeometry(0.02, 0.06, 6), basic(0xe0a346));
-birdBeak.position.set(0.145, 0.075, 0);
+addOutline(birdHead, 0.015);
+const birdCheekL = new THREE.Mesh(new THREE.SphereGeometry(0.025, 9, 7), birdPale);
+birdCheekL.scale.set(0.8, 0.65, 0.55);
+birdCheekL.position.set(0.14, 0.178, 0.04);
+birdGroup.add(birdCheekL);
+const birdCheekR = birdCheekL.clone();
+birdCheekR.position.z = -0.04;
+birdGroup.add(birdCheekR);
+const birdCap = new THREE.Mesh(new THREE.SphereGeometry(0.045, 12, 8), toon(0x5b4b3b, { soft: true }));
+birdCap.scale.set(0.9, 0.45, 0.75);
+birdCap.position.set(0.105, 0.235, 0);
+birdGroup.add(birdCap);
+const birdBib = new THREE.Mesh(new THREE.SphereGeometry(0.035, 12, 8), birdDark);
+birdBib.scale.set(0.7, 0.75, 0.6);
+birdBib.position.set(0.095, 0.145, 0);
+birdGroup.add(birdBib);
+[-1, 1].forEach((side) => {
+  const eye = new THREE.Mesh(new THREE.SphereGeometry(0.0065, 8, 6), basic(0x151615));
+  eye.position.set(0.16, 0.202, side * 0.034);
+  birdGroup.add(eye);
+  const eyeRing = new THREE.Mesh(new THREE.SphereGeometry(0.009, 8, 6), birdPale);
+  eyeRing.scale.set(0.55, 0.55, 0.4);
+  eyeRing.position.set(0.158, 0.202, side * 0.036);
+  birdGroup.add(eyeRing);
+});
+const birdBeak = new THREE.Mesh(new THREE.ConeGeometry(0.013, 0.052, 8), birdBeakMat);
+birdBeak.position.set(0.187, 0.192, 0);
 birdBeak.rotation.z = -Math.PI / 2;
+birdBeak.castShadow = false;
 birdGroup.add(birdBeak);
+
+// Tail feathers fan out behind the body.
+const tailShape = new THREE.Shape();
+tailShape.moveTo(0, 0);
+tailShape.lineTo(-0.15, 0.014);
+tailShape.lineTo(-0.19, 0.006);
+tailShape.lineTo(-0.16, -0.008);
+tailShape.lineTo(-0.1, -0.01);
+tailShape.closePath();
+const birdTailGeo = new THREE.ShapeGeometry(tailShape);
+[-1, 0, 1].forEach((side, i) => {
+  const tail = new THREE.Mesh(
+    birdTailGeo,
+    i === 1 ? toon(0x5a4938, { side: THREE.DoubleSide, soft: true }) : birdWingMat
+  );
+  tail.position.set(-0.06, 0.092 + i * 0.004, side * 0.02);
+  tail.rotation.y = side * 0.22;
+  tail.rotation.x = -0.1;
+  tail.castShadow = false;
+  birdGroup.add(tail);
+});
+
+// Folded wings built from a shaped feather silhouette, not rectangular cards.
+const wingShape = new THREE.Shape();
+wingShape.moveTo(0, 0.012);
+wingShape.quadraticCurveTo(-0.055, 0.075, -0.155, 0.058);
+wingShape.quadraticCurveTo(-0.225, 0.038, -0.245, 0.006);
+wingShape.lineTo(-0.215, -0.018);
+wingShape.lineTo(-0.188, -0.011);
+wingShape.lineTo(-0.16, -0.038);
+wingShape.lineTo(-0.133, -0.026);
+wingShape.lineTo(-0.103, -0.05);
+wingShape.lineTo(-0.073, -0.032);
+wingShape.lineTo(-0.045, -0.045);
+wingShape.quadraticCurveTo(-0.02, -0.02, 0, -0.006);
+wingShape.closePath();
+const birdWingGeo = new THREE.ExtrudeGeometry(wingShape, {
+  depth: 0.007,
+  bevelEnabled: true,
+  bevelSize: 0.0018,
+  bevelThickness: 0.0018,
+  bevelSegments: 1,
+  curveSegments: 5,
+});
+const birdWingInnerGeo = new THREE.ShapeGeometry(wingShape);
+birdWingInnerGeo.scale(0.68, 0.62, 1);
 const birdWings = [];
 [-1, 1].forEach((side) => {
   const pivot = new THREE.Group();
-  pivot.position.set(-0.01, 0.02, side * 0.065);
-  const wing = new THREE.Mesh(new THREE.PlaneGeometry(0.2, 0.1), toon(0x8f8171, { side: THREE.DoubleSide }));
-  wing.position.z = side * 0.075;
-  wing.rotation.y = side * 0.35;
+  pivot.position.set(0.025, 0.14, side * 0.058);
+  pivot.rotation.y = side * 0.14;
+  const wing = new THREE.Mesh(birdWingGeo, birdWingMat);
   wing.castShadow = false;
   pivot.add(wing);
+  const covert = new THREE.Mesh(birdWingInnerGeo, toon(0x9b8469, { side: THREE.DoubleSide, soft: true }));
+  covert.position.set(0.02, 0.022, side * 0.003);
+  pivot.add(covert);
   birdGroup.add(pivot);
   birdWings.push(pivot);
 });
+
+// Gripping feet: thin legs and toes resting on the crossarm.
+[-1, 1].forEach((side) => {
+  const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.0035, 0.004, 0.045, 6), birdLegMat);
+  leg.position.set(0.006, 0.025, side * 0.036);
+  birdGroup.add(leg);
+  for (let toe = -1; toe <= 1; toe++) {
+    const foot = new THREE.Mesh(new THREE.BoxGeometry(0.024, 0.004, 0.005), birdLegMat);
+    foot.position.set(0.017 + (toe === 1 ? 0.01 : 0), 0.002, side * 0.036 + toe * 0.007);
+    foot.rotation.y = toe * 0.25;
+    birdGroup.add(foot);
+  }
+});
+
 addHitSphere(0.3, -5.45, BIRD_Y, 1.52, world, { type: 'bird' });
 function pokeBird() {
   birdState.flap = 2.4;
