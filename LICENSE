@@ -1,0 +1,24 @@
+星見マート · HOSHIMI MART DIORAMA
+Proprietary License — All Rights Reserved
+
+Copyright (c) 2026 xyy99888-byte. All rights reserved.
+
+This repository and its contents — including the source code, scene data,
+procedural models, textures, shaders, text, documentation, and the generated
+single-file build — are proprietary work.
+
+No license or other right is granted. Without prior written permission from
+the copyright holder, you may not copy, reproduce, modify, adapt, publish,
+distribute, sublicense, sell, or otherwise use this work, in whole or in part,
+including for commercial purposes.
+
+Viewing this public repository or the public demo page does not grant an
+open-source license or any right to reuse the work. Public visibility is for
+viewing and demonstration only.
+
+Third-party components included in this project (for example Three.js,
+OrbitControls, post-processing shaders, and the audio recordings listed in
+AUDIO_CREDITS.md) remain under their respective licenses. Those third-party
+licenses are not changed by this notice.
+
+For permission requests, contact the repository owner through GitHub.
